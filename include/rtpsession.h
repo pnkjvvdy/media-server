@@ -11,7 +11,6 @@
 #include "config.h"
 #include "use.h"
 #include "rtp.h"
-#include "rtpbuffer.h"
 #include "remoteratecontrol.h"
 #include "fecdecoder.h"
 #include "stunmessage.h"
@@ -51,7 +50,6 @@ public:
 	RTPSession(MediaFrame::Type media,Listener *listener);
 	virtual ~RTPSession();
 	int Init();
-	void SetRemoteRateEstimator(RemoteRateEstimator* estimator);
 	int SetLocalPort(int recvPort);
 	int GetLocalPort();
 	int SetRemotePort(char *ip,int sendPort);
@@ -63,8 +61,8 @@ public:
 	bool SetSendingCodec(DWORD codec);
 
 	void SendEmptyPacket();
-	int SendPacket(RTPPacket &packet,DWORD timestamp);
-	int SendPacket(RTPPacket &packet);
+	int SendPacket(const RTPPacket::shared &packet,DWORD timestamp);
+	int SendPacket(const RTPPacket::shared &packet);
 	
 	RTPPacket::shared GetPacket();
 	void CancelGetPacket();
@@ -87,15 +85,17 @@ public:
 	void FlushRTXPackets();
 
 	int SendTempMaxMediaStreamBitrateNotification(DWORD bitrate,DWORD overhead);
-
+	
+	void SetTemporalMaxLimit(DWORD limit)	{ recv.remoteRateEstimator.SetTemporalMaxLimit(limit);	}
+	void SetTemporalMinLimit(DWORD limit)	{ recv.remoteRateEstimator.SetTemporalMinLimit(limit);	}
 	virtual void onTargetBitrateRequested(DWORD bitrate);
 
 	RTPOutgoingSourceGroup* GetOutgoingSourceGroup() { return &send; }
 	RTPIncomingSourceGroup* GetIncomingSourceGroup() { return &recv; }
 public:	
 	virtual void onRemotePeer(const char* ip, const short port);
-	virtual void onRTPPacket(BYTE* buffer, DWORD size);
-	virtual void onRTCPPacket(BYTE* buffer, DWORD size);
+	virtual void onRTPPacket(const BYTE* buffer, DWORD size);
+	virtual void onRTCPPacket(const BYTE* buffer, DWORD size);
 private:
 	void SetRTT(DWORD rtt);
 	int ReSendPacket(int seq);
@@ -108,12 +108,11 @@ protected:
 private:
 	typedef std::map<DWORD,RTPPacket::shared> RTPOrderedPackets;
 protected:
-	RemoteRateEstimator*	remoteRateEstimator;
 	bool	delegate; // Controls if we have to delegate dispatch of packets to the incoming group or not
 private:
 	MediaFrame::Type media;
 	Listener* listener;
-	RTPBuffer packets;
+	RTPWaitedBuffer packets;
 	RTPTransport transport;
 	char*	cname;
 	//Transmision
@@ -125,8 +124,6 @@ private:
 
 	//Recepcion
 	BYTE	recBuffer[MTU+SRTP_MAX_TRAILER_LEN] ALIGNEDTO32;
-	DWORD	recTimestamp;
-	timeval recTimeval;
 
 	//RTP Map types
 	RTPMap* rtpMapIn;
@@ -145,16 +142,15 @@ private:
 	bool	pendingTMBR;
 	DWORD	pendingTMBBitrate;
 
-	RTPLostPackets		losts;
-	bool			useNACK;
-	bool			useRTX;
-	bool			isNACKEnabled;
-	bool			useAbsTime;
+	bool	useNACK;
+	bool	useRTX;
+	bool	isNACKEnabled;
+	bool	useAbsTime;
 
-	bool 			useRTCP;
+	bool 	useRTCP;
 
 	RTPOrderedPackets	rtxs;
-	bool			usePLI;
+	bool	usePLI;
 };
 
 #endif

@@ -10,6 +10,7 @@
 #include "rtmp/rtmpmp4stream.h"
 #include "rtmp/flvrecorder.h"
 #include "audio.h"
+#include "AudioCodecFactory.h"
 
 #ifdef FLV1PARSER
 #include "flv1/flv1Parser.h"
@@ -240,7 +241,7 @@ void RTMPMP4Stream::onMediaFrame(MediaFrame &media)
 					frame->SetSamples16Bits(1);
 					frame->SetStereo(0);
 					//Set timestamp
-					frame->SetTimestamp(audio.GetTimeStamp()/8);
+					frame->SetTimestamp(audio.GetTimeStamp());
 					break;
 				}
 				default:
@@ -256,7 +257,7 @@ void RTMPMP4Stream::onMediaFrame(MediaFrame &media)
 			//Get video frame
 			VideoFrame& video = (VideoFrame&)media;
 			//Create rtmp frame
-			RTMPVideoFrame *frame = new RTMPVideoFrame(video.GetTimeStamp()/90,video.GetLength());
+			RTMPVideoFrame *frame = new RTMPVideoFrame(video.GetTimeStamp(),video.GetLength());
 			//Check codec
 			switch(video.GetCodec())
 			{

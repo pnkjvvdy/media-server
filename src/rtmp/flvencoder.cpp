@@ -9,7 +9,9 @@
 #include "rtmp/flv.h"
 #include "flv1/flv1codec.h"
 #include "audioencoder.h"
-#include "aacconfig.h"
+#include "aac/aacconfig.h"
+#include "AudioCodecFactory.h"
+#include "VideoCodecFactory.h"
 
 FLVEncoder::FLVEncoder(DWORD id) : RTMPMediaStream(id)
 {
@@ -592,14 +594,14 @@ int FLVEncoder::EncodeVideo()
 	while(encodingVideo)
 	{
 		//Nos quedamos con el puntero antes de que lo cambien
-		BYTE* pic=videoInput->GrabFrame(frameTime);
+		auto pic = videoInput->GrabFrame(frameTime);
 		
 		//Ensure we are still encoding
 		if (!encodingVideo)
 			break;
 
-		//Check pic
-		if (!pic)
+		//Check picture
+		if (!pic.buffer)
 			continue;
 
 		//Check if we need to send intra
@@ -612,7 +614,7 @@ int FLVEncoder::EncodeVideo()
 		}
 
 		//Encode next frame
-		VideoFrame *encoded = encoder->EncodeFrame(pic,videoInput->GetBufferSize());
+		VideoFrame *encoded = encoder->EncodeFrame(pic.buffer,pic.GetBufferSize());
 
 		//Check
 		if (!encoded)

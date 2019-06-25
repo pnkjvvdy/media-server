@@ -22,6 +22,8 @@ RTMPMediaStream::~RTMPMediaStream()
 
 DWORD RTMPMediaStream::AddMediaListener(Listener *listener)
 {
+	Log("-RTMPMediaStream::AddMediaListener() [id:%d,listener:%p]\n",id,listener); 
+	
 	//Lock mutexk
 	lock.WaitUnusedAndLock();
 	//Apend
@@ -38,6 +40,7 @@ DWORD RTMPMediaStream::AddMediaListener(Listener *listener)
 
 void RTMPMediaStream::RemoveAllMediaListeners()
 {
+	Log("-RTMPMediaStream::RemoveAllMediaListeners() [id:%d]\n",id);
 	//Lock mutexk
 	lock.WaitUnusedAndLock();
 	//For each listener
@@ -52,6 +55,8 @@ void RTMPMediaStream::RemoveAllMediaListeners()
 
 DWORD RTMPMediaStream::RemoveMediaListener(Listener *listener)
 {
+	Log("-RTMPMediaStream::RemoveMediaListener() [id:%d,listener:%p]\n",id,listener);
+	
 	//Lock mutexk
 	lock.WaitUnusedAndLock();
 	//Find it
@@ -151,7 +156,7 @@ RTMPPipedMediaStream::RTMPPipedMediaStream() : RTMPMediaStream(0)
 	//Not attached
 	attached = NULL;
 	//No first frame
-	first = -1;
+	first = (QWORD)-1;
 	//NO meta
 	meta = NULL;
 	//No desc
@@ -167,7 +172,7 @@ RTMPPipedMediaStream::RTMPPipedMediaStream(DWORD id) : RTMPMediaStream(id)
 	//Not attached
 	attached = NULL;
 	//No first frame
-	first = -1;
+	first = (QWORD)-1;
 	//NO meta
 	meta = NULL;
 	//No desc
@@ -251,7 +256,7 @@ void RTMPPipedMediaStream::onAttached(RTMPMediaStream *stream)
 void RTMPPipedMediaStream::onDetached(RTMPMediaStream *stream)
 {
 	//Detach if joined
-	if (attached!=stream)
+	if (attached && attached!=stream)
 		//Remove ourself as listeners
 		attached->RemoveMediaListener(this);
 	//Detach
@@ -264,12 +269,12 @@ void RTMPPipedMediaStream:: onMediaFrame(DWORD id,RTMPMediaFrame *frame)
 	QWORD ts = frame->GetTimestamp();
 
 	//Check if it is not set
-	if (ts==-1)
+	if (ts==(QWORD)-1)
 		//Reuse it
 		SendMediaFrame(frame);
 	
 	//Check if it is first
-	if (first==-1)
+	if (first==(QWORD)-1)
 	{
 		//If we have to wait to video
 		if (waitIntra)
@@ -387,7 +392,7 @@ void RTMPPipedMediaStream:: onMetaData(DWORD id,RTMPMetaData *publishedMetaData)
 			meta->AddParam(publishedMetaData->GetParams(i)->Clone());
 
 		//Check if we have started to send it
-		if (first!=-1)
+		if (first!=(QWORD)-1)
 		{
 			//Check if we have to rewrite ts
 			if (rewriteTimestamps)
@@ -404,7 +409,7 @@ void RTMPPipedMediaStream:: onMetaData(DWORD id,RTMPMetaData *publishedMetaData)
 		{
 
 			//Check if we have started to send it
-			if (first!=-1)
+			if (first!=(QWORD)-1)
 				//Set new meta
 				cloned->SetTimestamp(ts-first);
 			else
@@ -498,12 +503,14 @@ void RTMPCachedPipedMediaStream::SendMediaFrame(RTMPMediaFrame *frame)
  ***************************/
 RTMPNetStream::RTMPNetStream(DWORD id,Listener *listener) : RTMPPipedMediaStream(id)
 {
+	Log("-RTMPNetStream:RTMPNetStream() [id:%d,listener:%p,this:%p]\n",id,listener,this); 
 	//Store listener
 	this->listener = listener;
 }
 
 RTMPNetStream::~RTMPNetStream()
 {
+	Log("-RTMPNetStream::~RTMPNetStream() [id:%d,listener:%p,this:%p]\n",id,listener,this); 
 	if (listener)
 		listener->onNetStreamDestroyed(id);
 }
@@ -543,3 +550,53 @@ void  RTMPNetStream::fireOnNetStreamStatus(const RTMPNetStatusEventInfo &info,co
 		listener->onNetStreamStatus(id,info,message);
 }
 
+void RTMPNetStream::ProcessCommandMessage(RTMPCommandMessage* cmd)
+{
+	//Get message values
+	std::wstring name 	= cmd->GetName();
+
+	//Check command names
+	if (name.compare(L"play")==0)
+	{
+		//Get url to play
+		std::wstring url = *(cmd->GetExtra(0));
+		//Play
+		doPlay(url,this);
+	//Publish
+	} else if (name.compare(L"publish")==0){
+		//Get param
+		AMFData *obj = cmd->GetExtra(0);
+		//Check type
+		if (obj->CheckType(AMFData::String))
+		{
+			//Get url to play
+			std::wstring url = *obj;
+			//Publish
+			doPublish(url);
+		} else {
+			//Close
+			doClose(this);
+		}
+	} else if (name.compare(L"seek")==0) {
+		//Get timestamp
+		double time = *(cmd->GetExtra(0));
+		//Play
+		doSeek(time);
+	} else if (name.compare(L"pause")==0) {
+		//Get pause/resume flag
+		bool flag = *(cmd->GetExtra(0));
+		//Check if it is pause or resume
+		if (!flag)
+			//Pause
+			doPause();
+		else
+			//Resume
+			doResume();
+	} else if (name.compare(L"closeStream")==0) {
+		//Close stream
+		doClose(this);
+	} else {
+		//Send command
+		doCommand(cmd);
+	}
+}

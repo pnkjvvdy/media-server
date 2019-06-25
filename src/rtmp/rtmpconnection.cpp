@@ -61,6 +61,7 @@ RTMPConnection::RTMPConnection(Listener *listener)
 
 RTMPConnection::~RTMPConnection()
 {
+	Log("-RTMPConnection::~RTMPConnection() [0x%x]\n",this);
 	//End just in case
 	End();
 	//For each chunk strean
@@ -125,7 +126,7 @@ int RTMPConnection::End()
 		//Exit
 		return 0;
 
-	Log(">End RTMP connection\n");
+	Log(">RTMPConnection::End()\n");
 
 	//Not inited any more
 	inited = false;
@@ -142,25 +143,8 @@ int RTMPConnection::End()
 		setZeroThread(&thread);
 	}
 
-	//If got application
-	if (app)
-	{
-		//Get first
-		RTMPNetStreams::iterator it = streams.begin();
-
-		//Disconnect all streams
-		while (it!=streams.end())
-			//Delete stream
-			app->DeleteStream((it++)->second);
-
-		//Disconnect application
-		app->Disconnect(this);
-		//NO app
-		app = NULL;
-	}
-
 	//Ended
-	Log("<End RTMP connection\n");
+	Log("<RTMPConnection::End()\n");
 
 	return 1;
 }
@@ -193,9 +177,8 @@ int RTMPConnection::Run()
 {
 	BYTE data[1400];
 	unsigned int size = 1400;
-	unsigned int len = 0;
 
-	Log(">Run connection [%p]\n",this);
+	Log(">RTMPConnection::Run() [connection:%p]\n",this);
 
 	//Set values for polling
 	ufds[0].fd = socket;
@@ -269,13 +252,43 @@ int RTMPConnection::Run()
 			break;
 		}
 	}
+	
+	Log("-RTMPConnection::Run() Disconnecting [connection:%p]\n",this);
 
-	Log("<Run RTMP connection\n");
+	//Lock mutex
+	pthread_mutex_lock(&mutex);
+	
+	//If got application
+	if (app)
+	{
+		//Get first
+		RTMPNetStreams::iterator it = streams.begin();
 
+		//Disconnect all streams
+		while (it!=streams.end())
+			//Delete stream
+			app->DeleteStream((it++)->second);
+
+		//Disconnect application
+		app->RemoveListener(this);
+		//Disconnected
+		app->Disconnected();
+		//NO app
+		app = NULL;
+	}
+	
+	//Unlock mutex
+	pthread_mutex_unlock(&mutex);
+	
 	//Check listener
 	if (listener)
 		//launch event
 		listener->onDisconnect(this);
+	
+	Log("<RTMPConnection::Run() [connection:%p]\n",this);
+
+	//Done
+	return 1;
 }
 
 void RTMPConnection::SignalWriteNeeded()
@@ -460,7 +473,7 @@ void RTMPConnection::ParseData(BYTE *data,const DWORD size)
 					//Set random data from memory
 					BYTE* random = s01.GetRandom();
 					//Fill it
-					for (int i=0;i<s01.GetRandomSize();i++)
+					for (size_t i=0;i<s01.GetRandomSize();i++)
 						//With random
 						random[i] = rand();
 					//If we have to calculate digest
@@ -841,6 +854,9 @@ void RTMPConnection::ProcessControlMessage(DWORD streamId,BYTE type,RTMPObject* 
 		case RTMPMessage::SetPeerBandwidth:
 			Log("SetPeerBandwidth\n");
 			break;
+		default:
+			Log("Unknown [type:%d]\n",type);
+			break;
 	}
 }
 
@@ -856,66 +872,38 @@ void RTMPConnection::ProcessCommandMessage(DWORD streamId,RTMPCommandMessage* cm
 	AMFData* params 	= cmd->GetParams();
 
 	//Log
-	Log("-ProcessCommandMessage [streamId:%d,name:\"%ls\",transId:%ld]\n",streamId,name.c_str(),transId);
+	Log("-RTMPConnection::ProcessCommandMessage() [streamId:%d,name:\"%ls\",transId:%ld]\n",streamId,name.c_str(),transId);
 
 	//Check message Stream
 	if (streamId)
 	{
+		//Lock mutex
+		pthread_mutex_lock(&mutex);
+		
 		//Check if a stream has been created with that id
 		RTMPNetStreams::iterator it = streams.find(streamId);
 
 		//If not found
 		if (it==streams.end())
+		{
+			//Unnock mutex
+			pthread_mutex_unlock(&mutex);
 			//Send error
 			return SendCommandError(streamId,transId,NULL,NULL);
+		}
 
 		//Get media stream
 		RTMPNetStream* stream = it->second;
 
-		//Check command names
-		if (name.compare(L"play")==0)
-		{
-			//Get url to play
-			std::wstring url = *(cmd->GetExtra(0));
-			//Play
-			stream->doPlay(url,this);
-		//Publish
-		} else if (name.compare(L"publish")==0){
-			//Get param
-			AMFData *obj = cmd->GetExtra(0);
-			//Check type
-			if (obj->CheckType(AMFData::String))
-			{
-				//Get url to play
-				std::wstring url = *obj;
-				//Publish
-				stream->doPublish(url);
-			} else {
-				//Close
-				stream->doClose(this);
-			}
-		} else if (name.compare(L"seek")==0) {
-			//Get timestamp
-			double time = *(cmd->GetExtra(0));
-			//Play
-			stream->doSeek(time);
-		} else if (name.compare(L"pause")==0) {
-			//Get pause/resume flag
-			bool flag = *(cmd->GetExtra(0));
-			//Check if it is pause or resume
-			if (!flag)
-				//Pause
-				stream->doPause();
-			else
-				//Resume
-				stream->doResume();
-		} else if (name.compare(L"closeStream")==0) {
-			//Close stream
-			stream->doClose(this);
-		} else {
-			//Send command
-			stream->doCommand(cmd);
-		}
+		//Ensure valid
+		if (!stream)
+			//Send error
+			return SendCommandError(streamId,transId,NULL,NULL);
+		//Let it process the message
+		stream->ProcessCommandMessage(cmd);
+		
+		//Lock mutex
+		pthread_mutex_unlock(&mutex);
 
 	} else if (name.compare(L"connect")==0) {
 		double objectEncoding = 0;
@@ -952,43 +940,52 @@ void RTMPConnection::ProcessCommandMessage(DWORD streamId,RTMPCommandMessage* cm
 			objectEncoding = (double)obj->GetProperty(L"objectEncoding");
 
 		//Call listener
-		app = listener->OnConnect(appName,this);
+		app = listener->OnConnect(appName,this,[=](bool accepted){
+			//Log
+			Log("-RTMPConnection::ProcessCommandMessage() Accepting connection [accepted:%d]\n",accepted);
+			//IF not acepted
+			if (!accepted)
+			{
+				//End connection
+				End();
+				//Done
+				return;
+			}
+			//Send start stream
+			SendControlMessage(RTMPMessage::UserControlMessage,RTMPUserControlMessage::CreateStreamBegin(0));
+			//Send window acknoledgement
+			SendControlMessage(RTMPMessage::WindowAcknowledgementSize, RTMPWindowAcknowledgementSize::Create(512000));
+			//Send client bandwitdh
+			SendControlMessage(RTMPMessage::SetPeerBandwidth, RTMPSetPeerBandWidth::Create(512000,2));
+			//Increase chunk size
+			maxOutChunkSize = 512;
+			//Send client bandwitdh
+			SendControlMessage(RTMPMessage::SetChunkSize, RTMPSetChunkSize::Create(maxOutChunkSize));
+
+			//Create params & extra info
+			AMFObject* params = new AMFObject();
+			AMFObject* extra = new AMFObject();
+			AMFEcmaArray* data = new AMFEcmaArray();
+			//Add properties
+			params->AddProperty(L"fmsVer"		,L"FMS/3,5,1,525");
+			params->AddProperty(L"capabilities"	,31.0);
+			params->AddProperty(L"mode"		,1.0);
+			extra->AddProperty(L"level"		,L"status");
+			extra->AddProperty(L"code"		,L"NetConnection.Connect.Success");
+			extra->AddProperty(L"description"	,L"Connection succeded");
+			extra->AddProperty(L"data"		,data);
+			extra->AddProperty(L"objectEncoding"	,objectEncoding);
+			data->AddProperty(L"version"           	,L"3,5,1,525");
+			//Create
+			SendCommandResult(streamId,transId,params,extra);
+			//Ping
+			PingRequest();
+		});
 
 		//If it is null
 		if (!app)
 			//Send error
 			return SendCommandError(streamId,transId);
-
-		//Send start stream
-		SendControlMessage(RTMPMessage::UserControlMessage,RTMPUserControlMessage::CreateStreamBegin(0));
-		//Send window acknoledgement
-		SendControlMessage(RTMPMessage::WindowAcknowledgementSize, RTMPWindowAcknowledgementSize::Create(512000));
-		//Send client bandwitdh
-		SendControlMessage(RTMPMessage::SetPeerBandwidth, RTMPSetPeerBandWidth::Create(512000,2));
-		//Increase chunk size
-		maxOutChunkSize = 512;
-		//Send client bandwitdh
-		SendControlMessage(RTMPMessage::SetChunkSize, RTMPSetChunkSize::Create(maxOutChunkSize));
-
-		//Create params & extra info
-		AMFObject* params = new AMFObject();
-		AMFObject* extra = new AMFObject();
-		AMFEcmaArray* data = new AMFEcmaArray();
-		objectEncoding = 3;
-		//Add properties
-		params->AddProperty(L"fmsVer"		,L"FMS/3,5,1,525");
-		params->AddProperty(L"capabilities"	,31.0);
-		params->AddProperty(L"mode"		,1.0);
-		extra->AddProperty(L"level"		,L"status");
-		extra->AddProperty(L"code"		,L"NetConnection.Connect.Success");
-		extra->AddProperty(L"description"	,L"Connection succeded");
-		extra->AddProperty(L"data"		,data);
-		extra->AddProperty(L"objectEncoding"	,objectEncoding);
-		data->AddProperty(L"version"           	,L"3,5,1,525");
-		//Create
-		SendCommandResult(streamId,transId,params,extra);
-		//Ping
-		PingRequest();
 	} else if (name.compare(L"createStream")==0 || name.compare(L"initStream")==0) {
 		//Check if we have an application
 		if (!app)
@@ -1014,20 +1011,32 @@ void RTMPConnection::ProcessCommandMessage(DWORD streamId,RTMPCommandMessage* cm
 		//Get
 		DWORD mediaStreamId = ((AMFNumber*)cmd->GetExtra(0))->GetNumber();
 		//Log
-		Log("-Deleting stream [%d]\n",mediaStreamId);
+		Log("-RTMPConnection::ProcessCommandMessage() Deleting stream [%d]\n",mediaStreamId);
+		
+		//Lock mutex
+		pthread_mutex_lock(&mutex);
+		
 		//Find stream
 		//Check if a stream has been created with that id
 		RTMPNetStreams::iterator it = streams.find(mediaStreamId);
 
 		//If not found
 		if (it==streams.end())
+		{
+			//Unnock mutex
+			pthread_mutex_unlock(&mutex);
 			//Send error
 			return SendCommandError(0,transId,NULL,NULL);
+		}
 
 		//Get media stream
 		RTMPNetStream* stream = it->second;
 		//Let the application delete the stream, it will call the callback to erase it from the stream list when appropiate
 		app->DeleteStream(stream);
+		
+		//Unlock mutex
+		pthread_mutex_unlock(&mutex);
+		
 		//Send eof stream
 		SendControlMessage(RTMPMessage::UserControlMessage,RTMPUserControlMessage::CreateStreamEOF(mediaStreamId));
 	} else {
@@ -1041,19 +1050,30 @@ void RTMPConnection::ProcessMediaData(DWORD streamId,RTMPMediaFrame *frame)
 	//Check message Stream
 	if (streamId)
 	{
+		//Lock mutex
+		pthread_mutex_lock(&mutex);
+		
 		//Check if a stream has been created with that id
 		RTMPNetStreams::iterator it = streams.find(streamId);
 
 		//If not found
 		if (it==streams.end())
 		{
-			Error("-Session not found\n");
+			//Unnock mutex
+			pthread_mutex_unlock(&mutex);
+			
+			//Log
+			Error("-RTMPConnection::ProcessMediaData() stream not found [streamId:%d]\n",streamId);
+			
 			//Exit (Should close connection??)
 			return;
 		}
 
 		//Publish frame
 		it->second->SendMediaFrame(frame);
+		
+		//Unnock mutex
+		pthread_mutex_unlock(&mutex);
 	}
 }
 
@@ -1064,25 +1084,33 @@ void RTMPConnection::ProcessMetaData(DWORD streamId,RTMPMetaData *meta)
 	//Check message Stream
 	if (streamId)
 	{
+		//Lock mutex
+		pthread_mutex_lock(&mutex);
+		
 		//Check if a stream has been created with that id
 		RTMPNetStreams::iterator it = streams.find(streamId);
 
 		//If not found
 		if (it==streams.end())
 		{
-			Error("-Session not found\n");
+			//Unnock mutex
+			pthread_mutex_unlock(&mutex);
+			Error("-RTMPConnection::ProcessMetaData() stream not found [streamId:%d]\n",streamId);
 			//Exit (Should close connection??)
 			return;
 		}
 
 		//Publish frame
 		it->second->SendMetaData(meta);
+		
+		//Unnock mutex
+		pthread_mutex_unlock(&mutex);
 	}
 }
 
 void RTMPConnection::SendCommand(DWORD streamId,const wchar_t* name,AMFData *params,AMFData *extra)
 {
-	Log("-SendCommand [streamId:%d,name:%ls]\n",streamId,name);
+	Log("-RTMPConnection::SendCommand() [streamId:%d,name:%ls]\n",streamId,name);
 	//Create cmd response
 	RTMPCommandMessage *cmd = new RTMPCommandMessage(name,maxTransId++,params,extra);
 	//Dump
@@ -1097,7 +1125,7 @@ void RTMPConnection::SendCommand(DWORD streamId,const wchar_t* name,AMFData *par
 
 void RTMPConnection::SendCommandResponse(DWORD streamId,const wchar_t* name,QWORD transId,AMFData* params,AMFData *extra)
 {
-	Log("-SendCommandResponse [streamId:%d,name:%ls,transId:%ld]\n",streamId,name,transId);
+	Log("-RTMPConnection::SendCommandResponse() [streamId:%d,name:%ls,transId:%ld]\n",streamId,name,transId);
 	//Create cmd response
 	RTMPCommandMessage *cmd = new RTMPCommandMessage(name,transId,params,extra);
 	//Dump
@@ -1124,7 +1152,7 @@ void RTMPConnection::SendControlMessage(RTMPMessage::Type type,RTMPObject* msg)
 {
 	//Get timestamp
 	QWORD ts = getDifTime(&startTime)/1000;
-	Log("-SendControlMessage [%s]\n",RTMPMessage::TypeToString(type));
+	Log("-RTMPConnection::SendControlMessage() [%s]\n",RTMPMessage::TypeToString(type));
 	//Append message to control stream
 	chunkOutputStreams[2]->SendMessage(new RTMPMessage(0,ts,type,msg));
 	//We have new data to send
@@ -1150,7 +1178,7 @@ void RTMPConnection::onDetached(RTMPMediaStream *stream)
 }
 void RTMPConnection::onStreamBegin(DWORD streamId)
 {
-	Log("-onStreamBegin\n");
+	Log("-RTMPConnection::onStreamBegin() [stremId:%d]\n",streamId);
 	//Send control message
 	SendControlMessage(RTMPMessage::UserControlMessage,RTMPUserControlMessage::CreateStreamBegin(streamId));
 }
@@ -1186,7 +1214,7 @@ void RTMPConnection::onMediaFrame(DWORD streamId,RTMPMediaFrame *frame)
 	QWORD ts = frame->GetTimestamp();
 
 	//Check timestamp
-	if (ts==-1)
+	if (ts==(QWORD)-1)
 		//Calculate timestamp based on current time
 		ts = getDifTime(&startTime)/1000;
 
@@ -1212,7 +1240,7 @@ void RTMPConnection::onMetaData(DWORD streamId,RTMPMetaData *meta)
 	QWORD ts = meta->GetTimestamp();
 
 	//Check timestamp
-	if (ts==-1)
+	if (ts==(QWORD)-1)
 		//Calculate timestamp based on current time
 		ts = getDifTime(&startTime)/1000;
 
@@ -1249,8 +1277,11 @@ void RTMPConnection::onStreamReset(DWORD id)
 
 void RTMPConnection::onNetStreamDestroyed(DWORD streamId)
 {
-	Log("-Releasing stream [id:%d]\n",streamId);
+	Log("-RTMPConnection::onNetStreamDestroyed() Releasing stream [id:%d]\n",streamId);
 
+	//Lock mutex
+	pthread_mutex_lock(&mutex);
+	
 	//Find stream
 	RTMPNetStreams::iterator it = streams.find(streamId);
 
@@ -1258,6 +1289,9 @@ void RTMPConnection::onNetStreamDestroyed(DWORD streamId)
 	if (it!=streams.end())
 		//Remove it from streams
 		streams.erase(it);
+	
+	//Lock mutex
+	pthread_mutex_unlock(&mutex);
 }
 
 void RTMPConnection::onNetConnectionStatus(const RTMPNetStatusEventInfo &info,const wchar_t *message)
@@ -1269,10 +1303,16 @@ void RTMPConnection::onNetConnectionStatus(const RTMPNetStatusEventInfo &info,co
 
 void RTMPConnection::onNetConnectionDisconnected()
 {
-	Log("-onNetConnectionDisconnected [0x%x]\n",this);
+	Log("-RTMPConnection::onNetConnectionDisconnected() [0x%x]\n",this);
 
+	//Lock mutex
+	pthread_mutex_lock(&mutex);
+	
 	//Delete app
 	app = NULL;
+	
+	//Lock mutex
+	pthread_mutex_unlock(&mutex);
 
 	//End us
 	End();

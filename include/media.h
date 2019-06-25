@@ -22,7 +22,7 @@ public:
 	class RtpPacketization
 	{
 	public:
-		RtpPacketization(DWORD pos,DWORD size,BYTE* prefix,DWORD prefixLen)
+		RtpPacketization(DWORD pos,DWORD size,const BYTE* prefix,DWORD prefixLen)
 		{
 			//Store values
 			this->pos = pos;
@@ -60,7 +60,7 @@ public:
 
 	typedef std::vector<RtpPacketization*> RtpPacketizationInfo;
 public:
-	enum Type {Audio=0,Video=1,Text=2};
+	enum Type {Audio=0,Video=1,Text=2,Unknown=-1};
 
 	static const char * TypeToString(Type type)
 	{
@@ -84,7 +84,6 @@ public:
 		this->type = type;
 		//Set no timestamp
 		ts = (DWORD)-1;
-		time = (QWORD)-1;
 		//No duration
 		duration = 0;
 		//Set buffer size
@@ -115,7 +114,7 @@ public:
 		}
 	}
 	
-	void	AddRtpPacket(DWORD pos,DWORD size,BYTE* prefix,DWORD prefixLen)		
+	void	AddRtpPacket(DWORD pos,DWORD size,const BYTE* prefix,DWORD prefixLen)		
 	{
 		rtpInfo.push_back(new RtpPacketization(pos,size,prefix,prefixLen));
 	}
@@ -123,9 +122,6 @@ public:
 	Type	GetType() const		{ return type;	}
 	DWORD	GetTimeStamp() const	{ return ts;	}
 	void	SetTimestamp(DWORD ts)	{ this->ts = ts; }
-	
-	QWORD	GetTime() const		{ return time;		}
-	void	SetTime(QWORD time)	{ this->time = time;	}
 	
 	DWORD	GetSSRC() const		{ return ssrc;		}
 	void	SetSSRC(DWORD ssrc)	{ this->ssrc = ssrc;	}
@@ -151,7 +147,7 @@ public:
 		buffer = (BYTE*) realloc(buffer,bufferSize);
 	}
 
-	void SetMedia(BYTE* data,DWORD size)
+	void SetMedia(const BYTE* data,DWORD size)
 	{
 		//Check size
 		if (size>bufferSize)
@@ -163,7 +159,7 @@ public:
 		length=size;
 	}
 
-	DWORD AppendMedia(BYTE* data,DWORD size)
+	DWORD AppendMedia(const BYTE* data,DWORD size)
 	{
 		DWORD pos = length;
 		//Check size
@@ -181,7 +177,6 @@ public:
 protected:
 	Type type;
 	DWORD ts;
-	QWORD time;
 	DWORD ssrc;
 	RtpPacketizationInfo rtpInfo;
 	BYTE	*buffer;

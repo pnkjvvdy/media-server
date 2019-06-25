@@ -41,6 +41,7 @@ public:
 		else if (strcasecmp(ext,"urn:3gpp:video-orientation")==0)							return CoordinationOfVideoOrientation;
 		else if (strcasecmp(ext,"http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01")==0)	return TransportWideCC;
 		else if (strcasecmp(ext,"urn:ietf:params:rtp-hdrext:framemarking")==0)						return FrameMarking;
+		else if (strcasecmp(ext,"http://tools.ietf.org/html/draft-ietf-avtext-framemarking-07")==0)						return FrameMarking;
 		else if (strcasecmp(ext,"urn:ietf:params:rtp-hdrext:sdes:rtp-stream-id")==0)					return RTPStreamId;
 		else if (strcasecmp(ext,"urn:ietf:params:rtp-hdrext:sdes:repaired-rtp-stream-id")==0)				return RepairedRTPStreamId;
 		else if (strcasecmp(ext,"urn:ietf:params:rtp-hdrext:sdes:mid")==0)						return MediaStreamId;
@@ -143,8 +144,8 @@ public:
 		hasVideoOrientation = 0;
 		hasTransportWideCC = 0;
 		hasFrameMarking = 0;
-		hasRTPStreamId = 0;
-		hasRepairedRTPStreamId = 0;
+		hasRId = 0;
+		hasRepairedId = 0;
 		hasMediaStreamId = 0;
 	}
 	
@@ -168,8 +169,8 @@ public:
 	bool	hasVideoOrientation;
 	bool	hasTransportWideCC;
 	bool	hasFrameMarking;
-	bool	hasRTPStreamId;
-	bool	hasRepairedRTPStreamId;
+	bool	hasRId;
+	bool	hasRepairedId;
 	bool	hasMediaStreamId;
 };
 

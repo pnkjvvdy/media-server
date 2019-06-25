@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <cstddef>  // size_t
+#include <cstdint> 
 #include <map>
 #include <vector>
 #include <sstream>
@@ -40,8 +41,8 @@
 
 
 #define FD_INVALID	(int)-1
-#define MTU		1500
-#define RTPPAYLOADSIZE	1350
+#define MTU		1500u
+#define RTPPAYLOADSIZE	1350u
 
 #define QWORD		uint64_t
 #define DWORD		uint32_t
@@ -54,8 +55,13 @@
 #define SIZE4MUL(x)	((x)&0xFFFFFFFC)
 #define MAXKBITS 	300
 
+#if __APPLE__
+#define ALIGNEDTO32
+#define ZEROALIGNEDTO32
+#else
 #define ALIGNEDTO32        __attribute__ ((aligned (32)))
 #define ZEROALIGNEDTO32    __attribute__ ((aligned (32))) = {0}
+#endif
 
 inline DWORD GetWidth(DWORD size)
 {

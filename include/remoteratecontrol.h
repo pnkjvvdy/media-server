@@ -9,7 +9,6 @@
 #define	REMOTERATECONTROL_H
 
 #include "config.h"
-#include "rtp.h"
 #include "acumulator.h"
 #include "EventSource.h"
 
@@ -62,7 +61,7 @@ public:
 	}
 public:
 	RemoteRateControl();
-	void Update(QWORD time,QWORD ts,DWORD size);
+	void Update(QWORD time,QWORD ts,DWORD size, bool mark);
 	bool UpdateRTT(DWORD rtt);
 	bool UpdateLost(DWORD num);
 	void SetRateControlRegion(Region region);
@@ -77,6 +76,7 @@ private:
 	Acumulator bitrateCalc;
 	Acumulator fpsCalc;
 	Acumulator packetCalc;
+	Acumulator lostCalc;
 	DWORD rtt;
 	DWORD absSendTimeCycles;
 	QWORD prevTS;

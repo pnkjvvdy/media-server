@@ -36,7 +36,7 @@ public:
 
 	virtual void SetTimestamp(DWORD timestamp) = 0;
 	virtual MediaFrame* AddPacket(const RTPPacket::shared& packet) = 0;
-	virtual MediaFrame* AddPayload(BYTE* payload,DWORD payload_len) = 0;
+	virtual MediaFrame* AddPayload(const BYTE* payload,DWORD payload_len) = 0;
 	virtual void ResetFrame() = 0;
 	virtual DWORD GetTimestamp() = 0;
 private:
@@ -77,10 +77,6 @@ public:
 		if (frame.GetTimeStamp()==(DWORD)-1)
 			//Set timestamp
 			frame.SetTimestamp(packet->GetTimestamp());
-		//If not times
-		if (frame.GetTime()==(QWORD)-1)
-			//Set timestamp
-			frame.SetTime(packet->GetTime());
 		//Set SSRC
 		frame.SetSSRC(packet->GetSSRC());
 		//Add payload
@@ -88,7 +84,7 @@ public:
 		//Return frame
 		return &frame;
 	}
-	virtual MediaFrame* AddPayload(BYTE* payload,DWORD payload_len)
+	virtual MediaFrame* AddPayload(const BYTE* payload,DWORD payload_len)
 	{
 		//And data
 		DWORD pos = frame.AppendMedia(payload, payload_len);
@@ -107,7 +103,6 @@ public:
 		frame.SetLength(0);
 		//Clear time
 		frame.SetTimestamp((DWORD)-1);
-		frame.SetTime((QWORD)-1);
 	}
 	virtual DWORD GetTimestamp() 
 	{

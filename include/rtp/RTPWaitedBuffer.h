@@ -1,38 +1,27 @@
-/* 
- * File:   rtpbuffer.h
- * Author: Sergio
- *
- * Created on 24 de diciembre de 2012, 10:27
- */
+#ifndef RTPWAITEDBUFFER_H
+#define	RTPWAITEDBUFFER_H
 
-#ifndef RTPBUFFER_H
-#define	RTPBUFFER_H
 #include <errno.h>
 #include <pthread.h>
-#include "rtp.h"
+#include <map>
+
+#include "config.h"
 #include "acumulator.h"
 #include "use.h"
+#include "rtp/RTPPacket.h"
 
-class RTPBuffer 
+class RTPWaitedBuffer 
 {
 public:
-	RTPBuffer() : waited(1000)
+	RTPWaitedBuffer() : waited(1000)
 	{
-		//NO wait time
-		maxWaitTime = 0;
-		//No hurring up
-		hurryUp = false;
-		//No canceled
-		cancel = false;
-		//No next
-		next = (DWORD)-1;
 		//Crete mutex
 		pthread_mutex_init(&mutex,NULL);
 		//Create condition
 		pthread_cond_init(&cond,NULL);
 	}
 
-	virtual ~RTPBuffer()
+	virtual ~RTPWaitedBuffer()
 	{
 		//Free packets
 		Clear();
@@ -45,6 +34,9 @@ public:
 		//Get seq num
 		DWORD seq = rtp->GetExtSeqNum();
 		
+		//Log
+		//UltraDebug("-RTPWaitedBuffer::Add()  | rtp packet [next:%u,seq:%u,maxWaitTime=%d,cycles:%d-%u,time:%lld,current:%lld,hurry:%d]\n",next,seq,maxWaitTime,rtp->GetSeqCycles(),rtp->GetSeqNum(),rtp->GetTime(),GetTime(),hurryUp);
+		
 		//Lock
 		pthread_mutex_lock(&mutex);
 
@@ -52,7 +44,7 @@ public:
 		if (next!=(DWORD)-1 && seq<next)
 		{
 			//Error
-			Debug("-RTPBuffer::Add() | Out of order non recoverable packet [next:%u,seq:%u,maxWaitTime=%d,cycles:%d-%u,time:%lld,current:%lld,hurry:%d]\n",next,seq,maxWaitTime,rtp->GetSeqCycles(),rtp->GetSeqNum(),rtp->GetTime(),GetTime(),hurryUp);
+			//UltraDebug("-RTPWaitedBuffer::Add() | Out of order non recoverable packet [next:%u,seq:%u,maxWaitTime=%d,cycles:%d-%u,time:%lld,current:%lld,hurry:%d]\n",next,seq,maxWaitTime,rtp->GetSeqCycles(),rtp->GetSeqNum(),rtp->GetTime(),GetTime(),hurryUp);
 			//Unlock
 			pthread_mutex_unlock(&mutex);
 			//Skip it and lost forever
@@ -63,7 +55,7 @@ public:
 		if (packets.find(seq)!=packets.end())
 		{
 			//Error
-			Debug("-RTPBuffer::Add() | Already have that packet [next:%u,seq:%u,maxWaitTime=%d,cycles:%d-%u]\n",next,seq,maxWaitTime,rtp->GetSeqCycles(),rtp->GetSeqNum());
+			//UltraDebug("-RTPWaitedBuffer::Add() | Already have that packet [next:%u,seq:%u,maxWaitTime=%d,cycles:%d-%u]\n",next,seq,maxWaitTime,rtp->GetSeqCycles(),rtp->GetSeqNum());
 			//Unlock
 			pthread_mutex_unlock(&mutex);
 			//Skip it and lost forever
@@ -111,18 +103,30 @@ public:
 			auto candidate = it->second;
 			//Get time of the packet
 			QWORD time = candidate->GetTime();
+			//Get now
+			QWORD now = GetTime();
 
 			//Check if first is the one expected or wait if not
-			if (next==(DWORD)-1 || seq==next || time+maxWaitTime<GetTime() || hurryUp)
+			if (next==(DWORD)-1 || seq==next || time+maxWaitTime<=now || hurryUp)
 			{
 				//Update next
 				next = seq+1;
+				//Waiting time
+				waited.Update(now,now-time);
 				//Remove it
 				packets.erase(it);
 				//If no mor packets
 				if (packets.empty())
 					//Not hurryUp more
 					hurryUp = false;
+				//Skip if empty
+				if (!candidate->GetMediaLength())
+				{
+					//This one is dropped
+					discarded++;
+					//Try next
+					return GetOrdered();
+				}
 				//Return it
 				return candidate;
 			}
@@ -143,10 +147,9 @@ public:
 		//While we have to wait
 		while (!cancel)
 		{
-			//Check if we have somethin in queue
+			//Check if we have something in queue
 			if (!packets.empty())
 			{
-					
 				//Get first
 				auto it = packets.begin();
 				//Get first seq num
@@ -159,16 +162,24 @@ public:
 				QWORD now = GetTime();
 
 				//Check if first is the one expected or wait if not
-				if (next==(DWORD)-1 || seq==next || time+maxWaitTime<now || hurryUp)
+				if (next==(DWORD)-1 || seq==next || time+maxWaitTime<=now || hurryUp)
 				{
-					//Waiting time
-					waited.Update(now,now-time);
-					//We have it!
-					rtp = candidate;
 					//Update next
 					next = seq+1;
+					//Waiting time
+					waited.Update(now,now-time);
 					//Remove it
 					packets.erase(it);
+					//If we have to skip it
+					if (!candidate->GetMediaLength())
+					{
+						//Increase discarded packets count
+						discarded++;
+						//Try again
+						continue;
+					}
+					//We have it!
+					rtp = candidate;
 					//Return it!
 					break;
 				}
@@ -233,6 +244,9 @@ public:
 		//And remove all from queue
 		ClearPackets();
 
+		//None dropped
+		discarded = 0;
+		
 		//And remove cancel
 		cancel = false;
 
@@ -254,6 +268,12 @@ public:
 		//REturn objets in queu
 		return packets.size();
 	}
+
+	DWORD GetMaxWaitTime() const
+       	{
+		return maxWaitTime;
+	}
+
 	
 	void SetMaxWaitTime(DWORD maxWaitTime)
 	{
@@ -275,17 +295,43 @@ public:
 	
 	DWORD GetMinWaitedime() const
 	{
-		return waited.GetMinValueInWindow();
+		//Lock
+		pthread_mutex_lock(&mutex);
+		//Get value
+		DWORD minValueInWindow =  waited.GetMinValueInWindow();
+		//Unlock
+		pthread_mutex_unlock(&mutex);
+		//return it
+		return minValueInWindow;
 	}
 	
 	DWORD GetMaxWaitedTime() const
 	{
-		return waited.GetMaxValueInWindow();
+		//Lock
+		pthread_mutex_lock(&mutex);
+		//Get value
+		DWORD maxValueInWindow =  waited.GetMaxValueInWindow();
+		//Unlock
+		pthread_mutex_unlock(&mutex);
+		//return it
+		return maxValueInWindow;
 	}
 	
 	long double GetAvgWaitedTime() const
 	{
-		return waited.GetInstantMedia();
+		//Lock
+		pthread_mutex_lock(&mutex);
+		//Get value
+		long double media =  waited.GetInstantMedia();
+		//Unlock
+		pthread_mutex_unlock(&mutex);
+		//return it
+		return media;
+	}
+	
+	DWORD GetNumDiscardedPackets() const
+	{
+		return discarded;
 	}
 	
 private:
@@ -297,15 +343,17 @@ private:
 
 private:
 	//The event list
-	std::map<DWORD,RTPPacket::shared>	packets;
-	bool			cancel;
-	bool			hurryUp;
-	pthread_mutex_t		mutex;
-	pthread_cond_t		cond;
-	DWORD			next;
-	DWORD			maxWaitTime;
-	QWORD			time = 0;
-	Acumulator		waited;
+	std::map<DWORD,RTPPacket::shared> packets;
+	mutable pthread_mutex_t	mutex;
+	pthread_cond_t cond;
+	Acumulator waited;
+	
+	bool  cancel		= false;
+	bool  hurryUp		= false;
+	DWORD next		= (DWORD)-1;
+	DWORD maxWaitTime	= 0;
+	QWORD time		= 0;
+	DWORD discarded		= 0;
 };
 
 #endif	/* RTPBUFFER_H */

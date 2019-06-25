@@ -20,7 +20,7 @@ int PCAPFile::Open(const char* filename)
 	Log("PCAPFile::open() [\"%s\"]\n",filename);
 	
 	//Open file
-	if ((fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0x600))<0)
+	if ((fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0600))<0)
 		//Error
 		return Error("Could not open file [err:%d]\n",errno);
 		
@@ -39,7 +39,7 @@ int PCAPFile::Open(const char* filename)
 	return write(fd, out, sizeof(out));
 }
     
-void PCAPFile::WriteUDP(QWORD currentTimeMillis,DWORD originIp, short originPort, DWORD destIp, short destPort,BYTE* data, DWORD size)
+void PCAPFile::WriteUDP(QWORD currentTimeMillis,DWORD originIp, short originPort, DWORD destIp, short destPort,const BYTE* data, DWORD size)
 {
 	BYTE out[PCAP_UDP_PACKET_SIZE];
 	
@@ -73,8 +73,9 @@ void PCAPFile::WriteUDP(QWORD currentTimeMillis,DWORD originIp, short originPort
 	mutex.Lock();
 
         //Write header and content
-	write(fd, out, sizeof(out));
-	write(fd, data, size);
+	if (write(fd, out, sizeof(out))<0 || write(fd, data, size)<0)
+		//Error
+		Error("-PCAPFile::WriteUDP()\n");
 	
 	//unlock
 	mutex.Unlock();
@@ -87,7 +88,8 @@ void PCAPFile::Close()
 	//Check not already closed
 	if (fd<0) return;
 
-	Log("PCAPFile::close()\n");
+	Log("-PCAPFile::close()\n");
+	
 	//Close file
 	close(fd);
 	fd = -1;

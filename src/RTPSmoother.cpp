@@ -29,11 +29,6 @@ RTPSmoother::~RTPSmoother()
 	if (inited)
 		//End
 		End();
-
-	//Clear memory
-	while(queue.Length()>0)
-		//Delete first
-		delete(queue.Pop());
 	
 	//Clean object
 	pthread_mutex_destroy(&mutex);
@@ -125,7 +120,7 @@ int RTPSmoother::SendFrame(MediaFrame* frame,DWORD duration)
 		MediaFrame::RtpPacketization* rtp = info[i];
 
 		//Create rtp packet
-		RTPPacketSched *packet = new RTPPacketSched(frame->GetType(),codec);
+		RTPPacketSched::shared packet = std::make_shared<RTPPacketSched>(frame->GetType(),codec);
 
 		//Make sure it is enought length
 		if (rtp->GetTotalLength()>packet->GetMaxMediaLength())
@@ -148,10 +143,10 @@ int RTPSmoother::SendFrame(MediaFrame* frame,DWORD duration)
 		else
 			//No last
 			packet->SetMark(false);
+		//Calculate sending time offset from first frame
+		packet->SetSendingTime(rtp->GetPos()*duration/frameLength);
 		//Calculate partial lenght
 		current += rtp->GetPrefixLen()+rtp->GetSize();
-		//Calculate sending time offset from first frame
-		packet->SetSendingTime(current*duration/frameLength);
 		//Append it
 		queue.Add(packet);
 	}
@@ -219,19 +214,19 @@ int RTPSmoother::Run()
 			continue;
 
 		//Get it
-		RTPPacketSched *sched = queue.Pop();
+		auto sched = queue.Pop();
 
 		//Check it
 		if (!sched)
 			//Exit
 			continue;
-
-		//Send it
-		session->SendPacket(*sched,sched->GetTimestamp());
-
+		
 		//Update sending time
 		sendingTime = sched->GetSendingTime();
 		
+		//Send it
+		session->SendPacket(sched);
+
 		//If it was not last
 		if (!sched->GetMark())
 		{
@@ -256,11 +251,8 @@ int RTPSmoother::Run()
 			//Check queue length, it should be empty
 			if (queue.Length()>0)
 				//Log it
-				Log("-RTPSmoother lagging behind [enqueued:%d,frameTime:%u,sendingTime:%u]\n",queue.Length(),frameTime,sendingTime);
+				Debug("-RTPSmoother lagging behind [enqueued:%d,frameTime:%u,sendingTime:%u]\n",queue.Length(),frameTime,sendingTime);
 		}
-
-		//DElete it
-		delete(sched);
 	}
 
 	Log("<RTPSmoother run\n");

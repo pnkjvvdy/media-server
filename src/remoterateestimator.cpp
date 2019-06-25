@@ -6,14 +6,15 @@
  */
 
 #include <map>
-
+#include <cstdlib>
+#include <cmath>
 #include "remoterateestimator.h"
 
-RemoteRateEstimator::RemoteRateEstimator() : bitrateAcu(400)
+RemoteRateEstimator::RemoteRateEstimator() : bitrateAcu(200)
 {
 	//Not last estimate
-	minConfiguredBitRate	= 32000;
-	maxConfiguredBitRate	= 30000000;
+	minConfiguredBitRate	= 128000;
+	maxConfiguredBitRate	= 1280000000;
 	currentBitRate		= 0;
 	maxHoldRate		= 0;
 	avgMaxBitRate		= -1.0f;
@@ -24,6 +25,8 @@ RemoteRateEstimator::RemoteRateEstimator() : bitrateAcu(400)
 	beta			= 0.9f;
 	noiseVar 		= 0;
 	rtt			= 200;
+	absSendTimeCycles	= 0;
+	curTS			= 0;
 	//Set initial state and region
 	cameFromState		= Decrease;
 	state			= Hold;
@@ -39,7 +42,7 @@ RemoteRateEstimator::~RemoteRateEstimator()
 }
 void RemoteRateEstimator::AddStream(DWORD ssrc)
 {
-	Log("-RemoteRateEstimator adding stream [ssrc:%x]\n",ssrc);
+	Log("-RemoteRateEstimator adding stream [ssrc:%u]\n",ssrc);
 
 	//Lock
 	lock.WaitUnusedAndLock();
@@ -52,9 +55,10 @@ void RemoteRateEstimator::AddStream(DWORD ssrc)
 	//Unlock
 	lock.Unlock();
 }
+
 void RemoteRateEstimator::RemoveStream(DWORD ssrc)
 {
-	Log("-RemoteRateEstimator removing stream [ssrc:%x]\n",ssrc);
+	Log("-RemoteRateEstimator removing stream [ssrc:%u]\n",ssrc);
 	
 	//Lock
 	lock.WaitUnusedAndLock();
@@ -75,13 +79,9 @@ void RemoteRateEstimator::RemoveStream(DWORD ssrc)
 
 void RemoteRateEstimator::Update(DWORD ssrc,const RTPPacket::shared& packet,DWORD size)
 {
-	//Get now
-	QWORD now = getTimeMS();
-
 	//Get rtp timestamp in ms
 	QWORD ts = packet->GetClockTimestamp();
 
-	/*
 	if (packet->HasAbsSentTime())
 	{
 		//Use absolote time instead of rtp time for knowing timestamp at origin
@@ -95,15 +95,18 @@ void RemoteRateEstimator::Update(DWORD ssrc,const RTPPacket::shared& packet,DWOR
 			ts += 64000;
 		}
 	}
-	*/
+	
 	
 	//Update
-	Update(packet->GetSSRC(),now,ts,size);
+	Update(packet->GetSSRC(),packet->GetTime(),ts,size, packet->GetMark());
+	
+	//Store current ts
+	curTS = ts;
 }
 
-void RemoteRateEstimator::Update(DWORD ssrc,QWORD now,QWORD ts,DWORD size)
+void RemoteRateEstimator::Update(DWORD ssrc,QWORD now,QWORD ts,DWORD size, bool mark)
 {
-	//UltraDebug("-Update [ssrc:%x,now:%lu,last:%u,ts:%lu,size:%u\n",ssrc,now,lastChange,ts,size);
+	//UltraDebug("-Update [ssrc:%u,now:%lu,last:%u,ts:%lu,size:%u,inwindow:%d\n",ssrc,now,lastChange,ts,size,bitrateAcu.IsInWindow());
 	//Lock
 	lock.WaitUnusedAndLock();
 
@@ -118,6 +121,17 @@ void RemoteRateEstimator::Update(DWORD ssrc,QWORD now,QWORD ts,DWORD size)
 
 	//Reset noise
 	noiseVar = 0;
+	
+	//Check if it was an unknown stream
+	if (streams.find(ssrc)==streams.end())
+	{
+		//Create new control
+		RemoteRateControl* ctrl = new RemoteRateControl();
+		//Set tracer
+		ctrl->SetEventSource(eventSource);
+		//Add it
+		streams[ssrc] = ctrl;
+	}
 
 	//For each one
 	for (Streams::iterator it = streams.begin(); it!=streams.end(); ++it)
@@ -130,7 +144,7 @@ void RemoteRateEstimator::Update(DWORD ssrc,QWORD now,QWORD ts,DWORD size)
 		if (it->first == ssrc)
 		{
 			//Update it
-			ctrl->Update(now,ts,size);
+			ctrl->Update(now,ts,size, mark);
 			//Check if pacekt triggered overuse
 			if (streamUsage!=RemoteRateControl::OverUsing && ctrl->GetUsage()==RemoteRateControl::OverUsing)
 			{
@@ -147,9 +161,9 @@ void RemoteRateEstimator::Update(DWORD ssrc,QWORD now,QWORD ts,DWORD size)
 		//Get noise var and sum up
 		noiseVar += ctrl->GetNoise();
 	}
-
+	
 	//Normalize
-	noiseVar = noiseVar/streams.size();
+	noiseVar = streams.size() ? noiseVar/streams.size() : 0;
 
 	//If not firs update
 	if (!lastChange)
@@ -157,13 +171,17 @@ void RemoteRateEstimator::Update(DWORD ssrc,QWORD now,QWORD ts,DWORD size)
 		lastChange = now+500;
 	
 	//Only update once per second or when the stream starts to overuse
-	if (lastChange+1000<now || streamOverusing)
+	if (lastChange+1000<now)
 	{
 		//Update
 		Update(usage,streamOverusing,now);
 		//Reset min max
 		bitrateAcu.ResetMinMax();
+	} else if ( streamOverusing) {
+		//Update but not reset
+		Update(usage,streamOverusing,now);
 	}
+		
 	//Unloc
 	lock.Unlock();
 	//Exit
@@ -372,7 +390,7 @@ double RemoteRateEstimator::RateIncreaseFactor(QWORD now, QWORD last, DWORD reac
 		// bit rate in this region, by increasing in smaller steps.
 		alpha = alpha - (alpha - 1.0) / 2.0;
 	else if (region == RemoteRateControl::MaxUnknown)
-		alpha = alpha + (alpha - 1.0) * 2.0;
+		alpha = alpha + (alpha - 1.0) * 4.0;
 	else if (region == RemoteRateControl::BelowMax)
 		alpha = alpha + (alpha - 1.0) * 2.0;
 
@@ -494,26 +512,26 @@ void RemoteRateEstimator::UpdateLost(DWORD ssrc, DWORD lost, QWORD now)
 
 void RemoteRateEstimator::SetTemporalMaxLimit(DWORD limit)
 {
-	Log("-SetTemporalMaxLimit %d\n",limit);
+	Log("-RemoteRateEstimator::SetTemporalMaxLimit() %d\n",limit);
 	//Check if reseting
 	if (limit)
 		//Set maximun bitrate
 		maxConfiguredBitRate = limit;
 	else
 		//Set default max
-		maxConfiguredBitRate = 30000000;
+		maxConfiguredBitRate = 1280000000;
 }
 
 void RemoteRateEstimator::SetTemporalMinLimit(DWORD limit)
 {
-	Log("-SetTemporalMinLimit %d\n",limit);
+	Log("-RemoteRateEstimator::SetTemporalMinLimit %d\n",limit);
 	//Check if reseting
 	if (limit)
 		//Set maximun bitrate
 		minConfiguredBitRate = limit;
 	else
 		//Set default min
-		minConfiguredBitRate = 32000;
+		minConfiguredBitRate = 128000;
 }
 void RemoteRateEstimator::SetListener(Listener *listener)
 {

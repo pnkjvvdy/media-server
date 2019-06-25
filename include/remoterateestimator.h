@@ -8,9 +8,9 @@
 #ifndef REMOTERATEESTIMATOR_H
 #define	REMOTERATEESTIMATOR_H
 
-#include "remoteratecontrol.h"
 #include "use.h"
-
+#include "remoteratecontrol.h"
+#include "rtp/RTPPacket.h"
 
 class RemoteRateEstimator
 {
@@ -53,7 +53,7 @@ public:
 	void UpdateRTT(DWORD ssrc,DWORD rtt, QWORD now);
 	void UpdateLost(DWORD ssrc,DWORD lost, QWORD now);
 	void Update(DWORD ssrc,const RTPPacket::shared& packet,DWORD size);
-	void Update(DWORD ssrc,QWORD now,QWORD ts,DWORD size);
+	void Update(DWORD ssrc,QWORD now,QWORD ts,DWORD size, bool mark);
 	DWORD GetEstimatedBitrate();
 	void GetSSRCs(std::list<DWORD> &ssrcs);
 	void SetTemporalMaxLimit(DWORD limit);
@@ -85,7 +85,8 @@ private:
 	RemoteRateControl::Region region;
 	QWORD lastBitRateChange;
 	DWORD noiseVar;
-
+	QWORD curTS;
+	DWORD absSendTimeCycles;
 	float avgChangePeriod;
 	QWORD lastChange;
 	float beta;

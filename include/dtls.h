@@ -5,12 +5,13 @@
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/bio.h>
+#include <atomic>
 #include <string>
 #include <map>
 #include <vector>
 #include "config.h"
 #include "log.h"
-
+#include "Datachannels.h"
 
 class DTLSConnection
 {
@@ -53,7 +54,10 @@ public:
 		virtual ~Listener(){};
 	public:
 		//Interface
+		virtual void onDTLSPendingData() = 0;
 		virtual void onDTLSSetup(Suite suite,BYTE* localMasterKey,DWORD localMasterKeySize,BYTE* remoteMasterKey,DWORD remoteMasterKeySize) = 0;
+		virtual void onDTLSSetupError() = 0;
+		virtual void onDTLSShutdown() = 0;
 	};
 
 public:
@@ -101,6 +105,7 @@ public:
 private:
 	static int GenerateCertificate();
 	static int ReadCertificate();
+	
 private:
 	typedef std::map<Hash, std::string> LocalFingerPrints;
 	typedef std::vector<Hash> AvailableHashes;
@@ -116,7 +121,7 @@ private:
 	static bool		hasDTLS;
 
 public:
-	DTLSConnection(Listener& listener);
+	DTLSConnection(Listener& listener,TimeService& timeService,datachannels::Transport& sctp);
 	~DTLSConnection();
 
 	void SetSRTPProtectionProfiles(const std::string& profiles);
@@ -129,7 +134,7 @@ public:
 	Setup GetSetup() const { return setup; }
 	
 	int  Read(BYTE* data,DWORD size);
-	int  Write(BYTE *buffer,DWORD size);
+	int  Write(const BYTE *buffer,DWORD size);
 	int  HandleTimeout();
 	int  Renegotiate();
 
@@ -139,9 +144,12 @@ public:
 
 protected:
 	int  SetupSRTP();
-	int  CheckPending();
+	void CheckPending();
 private:
 	Listener& listener;
+	TimeService& timeService;
+	Timer::shared timeout;		// DTLS timout handler
+	datachannels::Transport &sctp;	// SCTP transport
 	SSL *ssl;			// SSL session 
 	BIO *read_bio;			// Memory buffer for reading 
 	BIO *write_bio;			// Memory buffer for writing 
@@ -151,7 +159,7 @@ private:
 	Connection connection;		// Whether this is a new or existing connection 
 	unsigned int rekey;		// Interval at which to renegotiate and rekey 
 	int rekeyid;			// Scheduled item id for rekeying 
-	bool inited;			// Set to true once the SSL stuff is set for this DTLS session 
+	std::atomic<bool> inited;	// Set to true once the SSL stuff is set for this DTLS session 
 	std::string profiles;		// Overrriden list of srtp profiles
 };
 

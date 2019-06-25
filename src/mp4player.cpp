@@ -1,6 +1,8 @@
 #include "mp4player.h"
 #include "log.h"
 #include "codecs.h"
+#include "AudioCodecFactory.h"
+#include "VideoCodecFactory.h"
 
 MP4Player::MP4Player() : streamer(this)
 {
@@ -99,7 +101,7 @@ void MP4Player::onRTPPacket(RTPPacket &packet)
 	SWORD buffer[1024];
 	DWORD bufferSize = 1024;
 	//Get data
-	BYTE *data = packet.GetMediaData();
+	const BYTE *data = packet.GetMediaData();
 	//Get leght
 	DWORD len = packet.GetMediaLength();
 	//Get mark

@@ -27,18 +27,16 @@ public:
 	RTCPBye(const std::vector<DWORD> &ssrcs,const char* reason);
 	~RTCPBye();
 	virtual DWORD GetSize();
-	virtual DWORD Parse(BYTE* data,DWORD size);
+	virtual DWORD Parse(const BYTE* data,DWORD size);
 	virtual DWORD Serialize(BYTE* data,DWORD size);
-	
+	virtual void Dump();
 	static RTCPBye::shared Create(const std::vector<DWORD> &ssrcs,const char* reason)
 	{
 		return std::make_shared<RTCPBye>(ssrcs,reason);
 	}
-	
+	const std::vector<DWORD>& GetSSRCs() const  { return ssrcs; };
 private:
-	typedef std::vector<DWORD> SSRCs;
-private:
-	SSRCs ssrcs;
+	std::vector<DWORD> ssrcs;
 	char* reason = NULL;
 };
 #endif /* RTCPBYE_H */

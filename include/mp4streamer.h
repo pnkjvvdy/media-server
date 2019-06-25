@@ -8,6 +8,7 @@
 #include "video.h"
 #include "codecs.h"
 #include "avcdescriptor.h"
+#include "EventLoop.h"
 
 struct MP4RtpTrack
 {
@@ -46,7 +47,7 @@ struct MP4RtpTrack
 		this->codec = codec;
 		this->type = type;
 		//Set type and clockrate
-		rtp.SetType(type);
+		rtp.SetPayloadType(type);
 		rtp.SetClockRate(clockrate);
 		//Empty the rest
 		mp4		= NULL;
@@ -73,7 +74,7 @@ struct MP4RtpTrack
 				//Create audio frame with 8Khz rate
 				frame = new AudioFrame((AudioCodec::Type)codec,8000);
 				break;
-			case MediaFrame::Text:
+			default:
 				//Not supported here
 				break;
 		}
@@ -172,26 +173,22 @@ public:
 	int Stop();
 	int Close();
 	
-protected:
+private:
 	int PlayLoop();
 
+protected:
+	EventLoop	loop;
 private:
-	static void* play(void *par);
+	Listener*	listener;
+	bool		opened	= false;
+	bool		playing = false;
+	QWORD		seeked	= 0;
+	QWORD		t	= 0;
 
-private:
-	Listener *listener;
-	bool opened;
-	bool playing;
-	pthread_t 	thread;
-	pthread_cond_t  cond;
-	pthread_mutex_t mutex;
-	QWORD		seeked;
-	QWORD		t;
-
-	MP4FileHandle mp4;
-	MP4RtpTrack *audio;
-	MP4RtpTrack *video;
-	MP4TextTrack *text;
+	MP4FileHandle	mp4	= MP4_INVALID_FILE_HANDLE;
+	MP4RtpTrack*	audio	= nullptr;
+	MP4RtpTrack*	video	= nullptr;
+	MP4TextTrack*	text	= nullptr;
 };
 
 #endif

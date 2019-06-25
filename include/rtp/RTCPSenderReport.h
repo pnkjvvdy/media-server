@@ -14,6 +14,7 @@
 #ifndef RTCPSENDERREPORT_H
 #define RTCPSENDERREPORT_H
 #include "config.h"
+#include "rtp/LayerInfo.h"
 #include "rtp/RTCPPacket.h"
 #include "rtp/RTCPReport.h"
 #include "rtp/RTCPCommonHeader.h"
@@ -29,7 +30,7 @@ public:
 	virtual ~RTCPSenderReport() = default;
 	virtual void Dump();
 	virtual DWORD GetSize();
-	virtual DWORD Parse(BYTE* data,DWORD size);
+	virtual DWORD Parse(const BYTE* data,DWORD size);
 	virtual DWORD Serialize(BYTE* data,DWORD size);
 
 	void SetOctectsSent(DWORD octectsSent)	{ this->octectsSent = octectsSent;	}
@@ -44,7 +45,7 @@ public:
 	DWORD GetRTPTimestamp() const		{ return rtpTimestamp;			}
 	DWORD GetNTPFrac()	const		{ return ntpFrac;			}
 	DWORD GetNTPSec()	const		{ return ntpSec;			}
-	QWORD GetNTPTimestamp()	const		{ return ((QWORD)ntpSec)<<32 | ntpFrac ;	}
+	QWORD GetNTPTimestamp()	const		{ return ((QWORD)ntpSec)<<32 | ntpFrac; }
 	DWORD GetSSRC()		const		{ return ssrc;				}
 
 	DWORD GetCount()	const				{ return reports.size();		}

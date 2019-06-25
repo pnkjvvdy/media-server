@@ -11,6 +11,7 @@
 #include "audio.h"
 #include "audiostream.h"
 #include "mp4recorder.h"
+#include "AudioCodecFactory.h"
 
 
 /**********************************
@@ -378,6 +379,9 @@ int AudioStream::RecAudio()
 
 	//Exit
 	Log("<RecAudio\n");
+
+	//Done
+	return 1;
 }
 
 /*******************************************
@@ -386,7 +390,6 @@ int AudioStream::RecAudio()
 *******************************************/
 int AudioStream::SendAudio()
 {
-	RTPPacket	packet(MediaFrame::Audio,audioCodec);
 	SWORD 		recBuffer[1024];
 	int 		sendBytes=0;
 	struct timeval 	before;
@@ -422,8 +425,7 @@ int AudioStream::SendAudio()
 	//Get clock rate for codec
 	DWORD clock = codec->GetClockRate();
 
-	//Set it
-	packet.SetClockRate(clock);
+	
 
 	//Get initial time
 	DWORD frameTime = getDifTime(&ini)*clock/1E6;
@@ -431,6 +433,12 @@ int AudioStream::SendAudio()
 	//Send audio
 	while(sendingAudio)
 	{
+		//Create packet
+		RTPPacket::shared packet = std::make_shared<RTPPacket>(MediaFrame::Audio,audioCodec);
+		
+		//Set clock rate
+		packet->SetClockRate(clock);
+			
 		//Increment rtp timestamp
 		frameTime += codec->numFrameSamples*clock/rate;
 
@@ -439,17 +447,17 @@ int AudioStream::SendAudio()
 			continue;
 
 		//Encode it
-		int len = codec->Encode(recBuffer,codec->numFrameSamples,packet.GetMediaData(),packet.GetMaxMediaLength());
+		int len = codec->Encode(recBuffer,codec->numFrameSamples,packet->AdquireMediaData(),packet->GetMaxMediaLength());
 
 		//check result
 		if(len<=0)
 			continue;
 
 		//Set lengths
-		packet.SetMediaLength(len);
+		packet->SetMediaLength(len);
 
 		//Set frametime
-		packet.SetTimestamp(frameTime);
+		packet->SetTimestamp(frameTime);
 
 		//Send it
 		rtp.SendPacket(packet,frameTime);

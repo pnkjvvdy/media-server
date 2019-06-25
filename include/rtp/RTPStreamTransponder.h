@@ -14,50 +14,43 @@
 #ifndef RTPSTREAMTRANSPONDER_H
 #define RTPSTREAMTRANSPONDER_H
 
-#include <queue>
 #include "rtp.h"
-#include "waitqueue.h"
 #include "VideoLayerSelector.h"
 
 class RTPStreamTransponder : 
-	public RTPIncomingSourceGroup::Listener,
+	public RTPIncomingMediaStream::Listener,
 	public RTPOutgoingSourceGroup::Listener
 {
 public:
 	RTPStreamTransponder(RTPOutgoingSourceGroup* outgoing,RTPSender* sender);
 	virtual ~RTPStreamTransponder();
 	
-	bool SetIncoming(RTPIncomingSourceGroup* incoming, RTPReceiver* receiver);
+	bool SetIncoming(RTPIncomingMediaStream* incoming, RTPReceiver* receiver);
 	void Close();
 	
-	virtual void onRTP(RTPIncomingSourceGroup* group,const RTPPacket::shared& packet) override;
-	virtual void onEnded(RTPIncomingSourceGroup* group) override;
+	virtual void onRTP(RTPIncomingMediaStream* stream,const RTPPacket::shared& packet) override;
+	virtual void onBye(RTPIncomingMediaStream* stream) override;
+	virtual void onEnded(RTPIncomingMediaStream* stream) override;
 	virtual void onPLIRequest(RTPOutgoingSourceGroup* group,DWORD ssrc) override;
+	virtual void onREMB(RTPOutgoingSourceGroup* group,DWORD ssrc,DWORD bitrate) override;
 	
 	void SelectLayer(int spatialLayerId,int temporalLayerId);
 	void Mute(bool muting);
 protected:
-	void Start();
-	int Run();
-	void Stop();
-	void Reset();
 	void RequestPLI();
-private:
-	static void * run(void *par);
 
 private:
 	
 	RTPOutgoingSourceGroup *outgoing	= NULL;
-	RTPIncomingSourceGroup *incoming	= NULL;
+	RTPIncomingMediaStream *incoming	= NULL;
 	RTPReceiver* receiver			= NULL;
 	RTPSender* sender			= NULL;
-	VideoLayerSelector* selector		= NULL;
+	std::unique_ptr<VideoLayerSelector> selector;
 	Mutex mutex;
-	WaitCondition wait;
-	std::queue<RTPPacket::shared> packets;
-	pthread_t thread	= {0};
-	bool running		= false;;
-	bool muted		= false;
+	
+	
+	volatile bool reset	= false;
+	volatile bool muted	= false;
 	DWORD firstExtSeqNum	= 0;  //First seq num of incoming stream
 	DWORD baseExtSeqNum	= 0;  //Base seq num of outgoing stream
 	DWORD lastExtSeqNum	= 0;  //Last seq num of sent packet
@@ -65,10 +58,16 @@ private:
 	QWORD baseTimestamp	= 0;  //Base rtp timestamp of ougogoing stream
 	QWORD lastTimestamp	= 0;  //Last rtp timestamp of outgoing stream
 	QWORD lastTime		= 0;  //Last sent time
+	bool  lastCompleted	= true; //Last packet enqueued had the M bit
 	DWORD dropped		= 0;  //Num of empty packets dropped
+	DWORD source		= 0;  //SSRC of the incoming rtp
 	DWORD ssrc		= 0;  //SSRC to rewrite to
-	BYTE spatialLayerId	= LayerInfo::MaxLayerId;
-	BYTE temporalLayerId	= LayerInfo::MaxLayerId;
+	MediaFrame::Type media;
+	BYTE codec		= 0;
+	BYTE type		= 0;
+	volatile BYTE spatialLayerId		= LayerInfo::MaxLayerId;
+	volatile BYTE temporalLayerId		= LayerInfo::MaxLayerId;
+	volatile BYTE lastSpatialLayerId	= LayerInfo::MaxLayerId;
 	WORD lastPicId		= 0;
 	WORD lastTl0Idx		= 0;
 	QWORD picId		= 0;

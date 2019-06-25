@@ -38,23 +38,20 @@ void H264Depacketizer::ResetFrame()
 	frame.SetLength(0);
 	//Clear time
 	frame.SetTimestamp((DWORD)-1);
-	frame.SetTime((QWORD)-1);
 }
 
 MediaFrame* H264Depacketizer::AddPacket(const RTPPacket::shared& packet)
 {
+	//Get timestamp in ms
+	auto ts = packet->GetTimestamp()/90;
 	//Check it is from same packet
-	if (frame.GetTimeStamp()!=packet->GetTimestamp())
+	if (frame.GetTimeStamp()!=ts)
 		//Reset frame
 		ResetFrame();
 	//If not timestamp
 	if (frame.GetTimeStamp()==(DWORD)-1)
 		//Set timestamp
-		frame.SetTimestamp(packet->GetTimestamp());
-	//If not times
-	if (frame.GetTime()==(QWORD)-1)
-		//Set timestamp
-		frame.SetTime(packet->GetTime());
+		frame.SetTimestamp(ts);
 	//Set SSRC
 	frame.SetSSRC(packet->GetSSRC());
 	//Add payload
@@ -63,7 +60,7 @@ MediaFrame* H264Depacketizer::AddPacket(const RTPPacket::shared& packet)
 	return packet->GetMark() ? &frame : NULL;
 }
 
-MediaFrame* H264Depacketizer::AddPayload(BYTE* payload, DWORD payload_len)
+MediaFrame* H264Depacketizer::AddPayload(const BYTE* payload, DWORD payload_len)
 {
 	BYTE nalHeader[4];
 	BYTE S, E;
@@ -143,6 +140,11 @@ MediaFrame* H264Depacketizer::AddPayload(BYTE* payload, DWORD payload_len)
 				/* strip NALU size */
 				payload += 2;
 				payload_len -= 2;
+				
+				//Check
+				if (!nalu_size || nalu_size>payload_len)
+					//Error
+					break;
 
 				//Get nal type
 				BYTE nalType = payload[0] & 0x1f;
@@ -176,6 +178,10 @@ MediaFrame* H264Depacketizer::AddPayload(BYTE* payload, DWORD payload_len)
 			/* FU-B	Fragmentation unit	 5.8 */
 
 
+			//Check length
+			if (payload_len < 2)
+				return NULL;
+			
 			/* +---------------+
 			 * |0|1|2|3|4|5|6|7|
 			 * +-+-+-+-+-+-+-+-+

@@ -66,7 +66,7 @@ public:
 class VideoCodec
 {
 public:
-	enum Type {H263_1996=34,H263_1998=103,MPEG4=104,H264=99,SORENSON=100,VP6=106,VP8=107,VP9=112,ULPFEC=108,FLEXFEC=113,RED=109,RTX=110,UNKNOWN=-1};
+	enum Type {H263_1996=34,H263_1998=103,MPEG4=104,H264=99,SORENSON=100,VP6=106,VP8=107,VP9=112,ULPFEC=108,FLEXFEC=113,RED=109,RTX=110,AV1=111,UNKNOWN=-1};
 	static const char* GetNameFor(Type type)
 	{
 		switch (type)
@@ -79,6 +79,7 @@ public:
 			case VP6:	return "VP6";
 			case VP8:	return "VP8";
 			case VP9:	return "VP9";
+			case AV1:	return "AV1";
 			case RED:	return "RED";
 			case RTX:	return "RTX";
 			case ULPFEC:	return "FEC";
@@ -100,6 +101,7 @@ public:
 		else if (strcasecmp(codec,"VP6")==0) return VP6;
 		else if (strcasecmp(codec,"VP8")==0) return VP8;
 		else if (strcasecmp(codec,"VP9")==0) return VP9;
+		else if (strcasecmp(codec,"AV1")==0) return AV1;
 		else if (strcasecmp(codec,"FLEXFEC")==0) return FLEXFEC;
 		return UNKNOWN;
 	}
@@ -110,7 +112,7 @@ public:
 class TextCodec
 {
 public:
-	enum Type {T140=106,T140RED=105};
+	enum Type {T140=102,T140RED=105};
 	static const char* GetNameFor(Type type)
 	{
 		switch (type)
@@ -123,6 +125,43 @@ public:
 	typedef std::map<int,Type> RTPMap;
 };
 
+static MediaFrame::Type GetMediaForCodec(BYTE codec)
+{
+	switch (codec)
+	{
+		case AudioCodec::PCMA:
+		case AudioCodec::PCMU:
+		case AudioCodec::GSM:
+		case AudioCodec::SPEEX16:
+		case AudioCodec::NELLY8:
+		case AudioCodec::NELLY11:
+		case AudioCodec::OPUS:
+		case AudioCodec::G722:
+		case AudioCodec::AAC:
+			return MediaFrame::Audio;
+		case VideoCodec::H263_1996:
+		case VideoCodec::H263_1998:
+		case VideoCodec::MPEG4:
+		case VideoCodec::H264:
+		case VideoCodec::SORENSON:  
+		case VideoCodec::VP6:
+		case VideoCodec::VP8:
+		case VideoCodec::VP9:
+		case VideoCodec::AV1:
+		case VideoCodec::RED:
+		case VideoCodec::RTX:
+		case VideoCodec::ULPFEC:
+		case VideoCodec::FLEXFEC:
+			return MediaFrame::Video;
+		case TextCodec::T140:
+		case TextCodec::T140RED:
+			return MediaFrame::Text;
+		default:
+			return MediaFrame::Unknown;
+	}
+}
+
+
 static const char* GetNameForCodec(MediaFrame::Type media,DWORD codec)
 {
 	switch (media)
@@ -133,7 +172,8 @@ static const char* GetNameForCodec(MediaFrame::Type media,DWORD codec)
 			return VideoCodec::GetNameFor((VideoCodec::Type)codec);
 		case MediaFrame::Text:
 			return TextCodec::GetNameFor((TextCodec::Type)codec);
+		default:
+			return "unknown codec and media";
 	}
-	return "unknown media";
 }
 #endif

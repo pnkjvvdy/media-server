@@ -11,11 +11,13 @@
 #include <srtp2/srtp.h>
 #include "config.h"
 #include "DTLSICETransport.h"
+#include "EventLoop.h"
 
 class RTPBundleTransport :
-	public DTLSICETransport::Sender
+	public DTLSICETransport::Sender,
+	public EventLoop::Listener
 {
-private:
+public:
 	struct Connection
 	{
 		Connection(DTLSICETransport* transport,bool disableSTUNKeepAlive)
@@ -27,27 +29,30 @@ private:
 		DTLSICETransport* transport;
 		std::set<ICERemoteCandidate*> candidates;
 		bool disableSTUNKeepAlive;
+		size_t iceRequestsSent		= 0;
+		size_t iceRequestsReceived	= 0;
+		size_t iceResponsesSent		= 0;
+		size_t iceResponsesReceived	= 0;
+		
 	};
 public:
 	RTPBundleTransport();
 	virtual ~RTPBundleTransport();
 	int Init();
-	DTLSICETransport* AddICETransport(const std::string &username,const Properties& properties);
+	int Init(int port);
+	Connection* AddICETransport(const std::string &username,const Properties& properties);
 	int RemoveICETransport(const std::string &username);
 	
 	int End();
 	
 	int GetLocalPort() const { return port; }
 	int AddRemoteCandidate(const std::string& username,const char* ip, WORD port);
-	virtual int Send(const ICERemoteCandidate* candidate,const BYTE *buffer,const DWORD size);
+	virtual int Send(const ICERemoteCandidate* candidate,Packet&& buffer) override;
 	
-private:
-	void Start();
-	void Stop();
-	int  Read();
-	int Run();
-private:
-	static  void* run(void *par);
+	virtual void OnRead(const int fd, const uint8_t* data, const size_t size, const uint32_t ip, const uint16_t port) override;
+	
+	bool SetAffinity(int cpu)	{ return loop.SetAffinity(cpu); }
+	TimeService& GetTimeService()	{ return loop;			}
 private:
 	typedef std::map<std::string,Connection*> Connections;
 	typedef std::map<std::string,ICERemoteCandidate*> RTPICECandidates;
@@ -55,13 +60,9 @@ private:
 	//Sockets
 	int 	socket;
 	int 	port;
-	pollfd	ufds[1];
-	bool	running;
-
-	pthread_t thread;
-	pthread_mutex_t	mutex;
-	pthread_cond_t cond;
 	
+	EventLoop loop;
+
 	Connections	 connections;
 	RTPICECandidates candidates;
 	Use	use;

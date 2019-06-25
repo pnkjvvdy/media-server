@@ -2,7 +2,17 @@
 # Fichero de configuracion
 ###########################################
 include config.mk
-OPTS+= -fPIC -DPIC -msse -msse2 -msse3 -DSPX_RESAMPLE_EXPORT= -DRANDOM_PREFIX=mcu -DOUTSIDE_SPEEX -DFLOATING_POINT -D__SSE2__ -Wno-narrowing -std=c++14
+OPTS+= -fPIC -DPIC -msse -msse2 -msse3 -msse4.1 -DSPX_RESAMPLE_EXPORT= -DRANDOM_PREFIX=mcu -DOUTSIDE_SPEEX -DFLOATING_POINT -D__SSE2__ -Wno-narrowing -std=c++17 -std=gnu++17 -march=native
+
+#GET OS
+OS = $(shell uname -s)
+PLATFORM = $(shell uname -p)
+
+ifeq ($(OS),"Linux")
+OPTS+=-DHAVE_STD_ALIGNED_ALLOC -DLINUX
+else
+OPTS+=-DDARWIN
+endif
 
 #DEBUG
 ifeq ($(DEBUG),yes)
@@ -14,7 +24,7 @@ ifeq ($(DEBUG),yes)
 		LDFLAGS+=  -fsanitize=address -fsanitize=leak -fsanitize=undefined 
 	endif
 else
-	OPTS+= -g -O3 -fexpensive-optimizations -funroll-loops
+	OPTS+= -g -O3
 	TAG=release
 endif
 
@@ -46,7 +56,7 @@ FLV1OBJ=flv1codec.o
 
 H264DIR=h264
 H264OBJ=h264encoder.o h264decoder.o 
-DEPACKETIZERSOBJ+= h264depacketizer.o
+DEPACKETIZERSOBJ+= h264depacketizer.o H264LayerSelector.o
 
 VP6DIR=vp6
 VP6OBJ=vp6decoder.o
@@ -75,15 +85,17 @@ G722DIR=g722
 G722OBJ=g722codec.o g722_decode.o g722_encode.o
 
 AACDIR=aac
-AACOBJ=aacencoder.o
+AACOBJ=aacencoder.o aacdecoder.o
 
-RTP=  RTPMap.o  RTPDepacketizer.o RTPPacket.o   RTPPacketSched.o rtp.o RTPSmoother.o  
+RTP=  LayerInfo.o RTPMap.o  RTPDepacketizer.o RTPPacket.o RTPPayload.o RTPPacketSched.o RTPSmoother.o  RTPLostPackets.o RTPSource.o RTPIncomingMediaStreamMultiplexer.o RTPIncomingSource.o RTPIncomingSourceGroup.o RTPOutgoingSource.o RTPOutgoingSourceGroup.o
 RTCP= RTCPCompoundPacket.o RTCPNACK.o RTCPReceiverReport.o RTCPCommonHeader.o RTPHeader.o RTPHeaderExtension.o RTCPApp.o RTCPExtendedJitterReport.o RTCPPacket.o RTCPReport.o RTCPSenderReport.o RTCPBye.o RTCPFullIntraRequest.o RTCPPayloadFeedback.o RTCPRTPFeedback.o RTCPSDES.o 
-CORE= dtls.o OpenSSL.o RTPTransport.o  stunmessage.o crc32calc.o http.o httpparser.o avcdescriptor.o utf8.o rtpsession.o RTPStreamTransponder.o VideoLayerSelector.o remoteratecontrol.o remoterateestimator.o RTPBundleTransport.o DTLSICETransport.o PCAPFile.o mp4streamer.o mp4recorder.o
+CORE= SRTPSession.o dtls.o OpenSSL.o RTPTransport.o  stunmessage.o crc32calc.o http.o httpparser.o avcdescriptor.o utf8.o rtpsession.o RTPStreamTransponder.o VideoLayerSelector.o remoteratecontrol.o remoterateestimator.o RTPBundleTransport.o DTLSICETransport.o PCAPFile.o PCAPReader.o PCAPTransportEmulator.o mp4streamer.o mp4recorder.o ActiveSpeakerDetector.o EventLoop.o Datachannels.o crc32c.o crc32c_sse42.o crc32c_portable.o MediaFrameListenerBridge.o SendSideBandwidthEstimation.o
 
-RTMP= rtmpparticipant.o amf.o rtmpmessage.o rtmpchunk.o rtmpstream.o rtmpconnection.o  rtmpserver.o  rtmpflvstream.o flvrecorder.o flvencoder.o
+RTMP= rtmpparticipant.o amf.o rtmpmessage.o rtmpchunk.o rtmpstream.o rtmpconnection.o  rtmpserver.o  rtmpflvstream.o flvrecorder.o flvencoder.o rtmppacketizer.o
 
-OBJS= xmlrpcserver.o xmlhandler.o xmlstreaminghandler.o statushandler.o CPUMonitor.o   EventSource.o eventstreaminghandler.o  audio.o video.o cpim.o  groupchat.o websocketserver.o websocketconnection.o  mcu.o rtpparticipant.o multiconf.o    xmlrpcmcu.o    audiostream.o videostream.o  textmixer.o textmixerworker.o textstream.o pipetextinput.o pipetextoutput.o  logo.o overlay.o audioencoder.o audiodecoder.o textencoder.o rtmpmp4stream.o rtmpnetconnection.o   rtmpclientconnection.o vad.o  uploadhandler.o  appmixer.o  videopipe.o framescaler.o sidebar.o mosaic.o partedmosaic.o asymmetricmosaic.o pipmosaic.o videomixer.o audiomixer.o audiotransrater.o pipeaudioinput.o pipeaudiooutput.o pipevideoinput.o pipevideooutput.o broadcastsession.o mp4player.o 
+PCC= BitrateController.o BitrateController.o NetworkController.o RTTTracker.o UtilityFunction.o
+
+OBJS= xmlrpcserver.o xmlhandler.o xmlstreaminghandler.o statushandler.o CPUMonitor.o   EventSource.o eventstreaminghandler.o  AudioCodecFactory.o VideoCodecFactory.o cpim.o  groupchat.o websocketserver.o websocketconnection.o  mcu.o rtpparticipant.o multiconf.o    xmlrpcmcu.o    audiostream.o videostream.o  textmixer.o textmixerworker.o textstream.o pipetextinput.o pipetextoutput.o  logo.o overlay.o VideoEncoderWorker.o audioencoder.o audiodecoder.o textencoder.o rtmpmp4stream.o rtmpnetconnection.o   rtmpclientconnection.o vad.o  uploadhandler.o  appmixer.o  videopipe.o framescaler.o sidebar.o mosaic.o partedmosaic.o asymmetricmosaic.o pipmosaic.o videomixer.o audiomixer.o audiotransrater.o pipeaudioinput.o pipeaudiooutput.o pipevideoinput.o pipevideooutput.o broadcastsession.o mp4player.o AudioPipe.o
 OBJS+= ${CORE} ${RTP} ${RTCP} ${RTMP} $(G711OBJ) $(H263OBJ) $(GSMOBJ)  $(H264OBJ) ${FLV1OBJ} $(SPEEXOBJ) $(NELLYOBJ) $(G722OBJ)  $(VADOBJ) $(VP6OBJ) $(VP8OBJ) $(VP9OBJ) $(OPUSOBJ) $(AACOBJ) $(DEPACKETIZERSOBJ)
 TARGETS=mcu test
 
@@ -98,7 +110,7 @@ endif
 
 OBJSMCU = $(OBJS) main.o
 OBJSLIB = ${CORE} ${RTP} ${RTCP} $(DEPACKETIZERSOBJ)
-OBJSTEST = $(OBJS) test/main.o test/test.o test/aac.o test/cpim.o test/rtp.o test/fec.o test/overlay.o test/vp8.o test/vp9.o test/bundle.o
+OBJSTEST = $(OBJS) test/main.o test/test.o test/h264.o test/aac.o test/cpim.o test/rtp.o test/fec.o test/overlay.o test/vp8.o test/vp9.o
 
 
 BUILDOBJSMCU = $(addprefix $(BUILD)/,$(OBJSMCU))
@@ -114,6 +126,7 @@ VPATH +=  %.c $(SRCDIR)/lib/
 VPATH +=  %.c $(SRCDIR)/src/
 VPATH +=  %.cpp $(SRCDIR)/src/
 VPATH +=  %.cpp $(SRCDIR)/src/rtp
+VPATH +=  %.cpp $(SRCDIR)/src/pcc
 VPATH +=  %.cpp $(SRCDIR)/src/rtmp
 VPATH +=  %.cpp $(SRCDIR)/src/ws
 VPATH +=  %.cpp $(SRCDIR)/src/$(G711DIR)
@@ -129,12 +142,11 @@ VPATH +=  %.cpp $(SRCDIR)/src/$(VP8DIR)
 VPATH +=  %.cpp $(SRCDIR)/src/$(VP9DIR)
 VPATH +=  %.cpp $(SRCDIR)/src/$(OPUSDIR)
 VPATH +=  %.cpp $(SRCDIR)/src/$(AACDIR)
-VPATH +=  %.cpp $(SRCDIR)/src/$(COREDIR)
+VPATH +=  %.cpp $(SRCDIR)/ext/libdatachannels/src
+VPATH +=  %.cc  $(SRCDIR)/ext/crc32c/src/
 
 
-INCLUDE+= -I$(SRCDIR)/src -I$(SRCDIR)/include/ $(VADINCLUDE)
-LDFLAGS+= -lpthread 
-LDLIBFLAGS+= -lpthread 
+INCLUDE+= -I$(SRCDIR)/src -I$(SRCDIR)/include/ $(VADINCLUDE) -I$(SRCDIR)/ext/libdatachannels/src -I$(SRCDIR)/ext/libdatachannels/src/internal -I$(SRCDIR)/ext/crc32c/include -I$(SRCDIR)/ext/crc32c/config/${OS}-${PLATFORM}/
 
 ifeq ($(STATIC_OPENSSL),yes)
 	INCLUDE+= -I$(OPENSSL_DIR)/include
@@ -152,10 +164,6 @@ ifeq ($(STATIC_LIBSRTP),yes)
 else
 	LDFLAGS+= -lsrtp2
 	LDLIBFLAGS+= -lsrtp2
-endif
-
-ifeq ($(LIBSRTP_GCM),yes)
-	OPTS+= -DSRTP_GCM
 endif
 
 ifeq ($(STATIC_LIBMP4),yes)
@@ -188,12 +196,13 @@ else
 	LDFLAGS+= -lavcodec -lswscale -lavformat -lavutil -lavresample  -lmp4v2 -lspeex -lvpx -lopus  -lx264 
 endif
 
-LDFLAGS+= -lgsm -lxmlrpc -lxmlrpc_xmlparse -lxmlrpc_xmltok -lxmlrpc_abyss -lxmlrpc_server -lxmlrpc_util -lnsl -lz -ljpeg -lpng -lresolv -L/lib/i386-linux-gnu -lgcrypt
+LDFLAGS+= -lgsm -lxmlrpc -lxmlrpc_xmlparse -lxmlrpc_xmltok -lxmlrpc_abyss -lxmlrpc_server -lxmlrpc_util -lnsl -lz -ljpeg -lpng -lresolv -L/lib/i386-linux-gnu -lgcrypt -lpthread -ldl
+LDLIBFLAGS+= -lpthread
 
 #For abyss
 OPTS 	+= -D_UNIX -D__STDC_CONSTANT_MACROS
 CFLAGS  += $(INCLUDE) $(OPTS)
-CXXFLAGS+= $(INCLUDE) $(OPTS) -std=c++11
+CXXFLAGS+= $(INCLUDE) $(OPTS) 
 
 %.o: %.c
 	@echo "[CC ] $(TAG) $<"
@@ -203,6 +212,10 @@ CXXFLAGS+= $(INCLUDE) $(OPTS) -std=c++11
 	@echo "[CXX] $(TAG) $<"
 	@$(CXX) $(CXXFLAGS) -c $< -o $(BUILD)/$@
 
+%.o: %.cc
+	@echo "[CXX] $(TAG) $<"
+	@$(CXX) $(CXXFLAGS) -c $< -o $(BUILD)/$@
+	
 ############################################
 #Targets
 ############################################
@@ -210,7 +223,7 @@ all: touch mkdirs $(TARGETS) certs
 
 touch:
 	@touch $(SRCDIR)/include/version.h
-	@(git log -1 --pretty=tformat:"#ifndef VERSION_H\r\n#define VERSION_H\r\n#define MCUVERSION \"%h\"\r\n#define MCUDATE \"%cd\"\r\n#endif\r\n" | sed 's/\\r\\n/\r\n/g' >  $(SRCDIR)/include/version.h) || true
+	@(git log -1 --pretty=tformat:"#ifndef VERSION_H%n#define VERSION_H%n#define MCUVERSION \"%h\"%n#define MCUDATE \"%cd\"%n#endif%n" | sed 's/\\r\\n/\r\n/g' >  $(SRCDIR)/include/version.h) || true
 mkdirs:
 	mkdir -p $(BUILD)
 	mkdir -p $(BUILD)/test
@@ -245,12 +258,22 @@ buildtest: $(OBJSTEST)
 	
 test: buildtest
 	$(BIN)/$@ -lavcodec
+
+
+bwe: bwe.o $(OBJSLIB) 
+	$(CXX) -o $(BIN)/$@ $(BUILDOBJOBJSLIB) $(LDLIBFLAGS) $(addprefix $(BUILD)/,$@.o)
 	
-libmediaserver.so: mkdirs $(OBJSLIB)
+sender:  sender.o $(OBJSLIB) 
+	$(CXX) -o $(BIN)/$@ $(BUILDOBJOBJSLIB) $(LDLIBFLAGS) $(addprefix $(BUILD)/,$@.o)
+	
+receiver: receiver.o $(OBJSLIB) 
+	$(CXX) -o $(BIN)/$@ $(BUILDOBJOBJSLIB) $(LDLIBFLAGS) $(addprefix $(BUILD)/,$@.o)
+	
+libmediaserver.so: touch mkdirs $(OBJSLIB)
 	$(CXX) -shared -o $(BIN)/$@ $(BUILDOBJOBJSLIB) ${LDLIBFLAGS}
 	@echo [OUT] $(TAG) $(BIN)/$@
 
-libmediaserver.a: mkdirs $(OBJSLIB)
-	${AR} rscT  $(BIN)/$@ $(BUILDOBJOBJSLIB)
+libmediaserver.a: touch mkdirs $(OBJSLIB)
+	${AR} rsc  $(BIN)/$@ $(BUILDOBJOBJSLIB)
 	@echo [OUT] $(TAG) $(BIN)/$@
  

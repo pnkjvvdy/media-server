@@ -664,6 +664,11 @@ DWORD AMFString::GetUTF8Size()
 	return u16parser.GetValue();
 }
 
+std::string AMFString::GetUTF8String()
+{
+	return utf8parser.GetUTF8String();
+}
+
 void AMFString::SetWString(const std::wstring& str)
 {
 	//Set string value
@@ -756,6 +761,11 @@ std::wstring AMFLongString::GetWString()
 	return utf8parser.GetWString();
 }
 
+std::string AMFLongString::GetUTF8String()
+{
+	return utf8parser.GetUTF8String();
+}
+
 DWORD AMFLongString::GetUTF8Size()
 {
 	return u32parser.GetValue();
@@ -775,7 +785,7 @@ AMFData* AMFObject::Clone()
 	AMFObject *obj = new AMFObject();
 
 	//Get object properties in order
-	for (int i=0;i<propertiesOrder.size();i++)
+	for (size_t i=0;i<propertiesOrder.size();i++)
 	{
 		//Search for the property
 		AMFObjectMap::iterator it = properties.find(propertiesOrder[i]);
@@ -970,7 +980,7 @@ DWORD AMFObject::Serialize(BYTE* data,DWORD size)
 	//Set start mark
 	data[len++] = AMFParser::ObjectMarker;
 	//Loop properties in insert order
-	for (int i=0;i<propertiesOrder.size();i++)
+	for (size_t i=0;i<propertiesOrder.size();i++)
 	{
 		//Search for the property
 		AMFObjectMap::iterator it = properties.find(propertiesOrder[i]);
@@ -998,7 +1008,7 @@ void AMFObject::Dump()
 {
 	Debug("[Object]\n");
 	//Loop properties in insert order
-	for (int i=0;i<propertiesOrder.size();i++)
+	for (size_t i=0;i<propertiesOrder.size();i++)
 	{
 		//Search for the property
 		AMFObjectMap::iterator it = properties.find(propertiesOrder[i]);
@@ -1173,6 +1183,11 @@ bool AMFEcmaArray::IsParsed()
 AMFObjectMap& AMFEcmaArray::GetElements()
 {
 	return elements;
+}
+
+DWORD AMFEcmaArray::GetLength()
+{
+	return elements.size();
 }
 
 AMFData& AMFEcmaArray::GetProperty(const wchar_t* key)
@@ -1403,6 +1418,11 @@ bool AMFStrictArray::IsParsed()
 AMFData** AMFStrictArray::GetElements()
 {
 	return elements;
+}
+
+DWORD AMFStrictArray::GetLength()
+{
+	return num.GetValue();
 }
 
 void AMFStrictArray::Dump()

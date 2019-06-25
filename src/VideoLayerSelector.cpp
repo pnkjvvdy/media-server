@@ -2,6 +2,7 @@
 #include "VideoLayerSelector.h"
 #include "vp9/VP9LayerSelector.h"
 #include "vp8/VP8LayerSelector.h"
+#include "h264/H264LayerSelector.h"
 
 
 class DummyVideoLayerSelector : public VideoLayerSelector
@@ -38,6 +39,8 @@ VideoLayerSelector* VideoLayerSelector::Create(VideoCodec::Type codec)
 			return new VP9LayerSelector();
 		case VideoCodec::VP8:
 			return new VP8LayerSelector();
+		case VideoCodec::H264:
+			return new H264LayerSelector();
 		default:
 			return new DummyVideoLayerSelector(codec);
 	}
@@ -51,6 +54,8 @@ VideoLayerSelector* VideoLayerSelector::Create(VideoCodec::Type codec)
 			return VP9LayerSelector::GetLayerIds(packet);
 		case VideoCodec::VP8:
 			return VP8LayerSelector::GetLayerIds(packet);
+		case VideoCodec::H264:
+			return H264LayerSelector::GetLayerIds(packet);
 		default:
 			return LayerInfo();
 	}

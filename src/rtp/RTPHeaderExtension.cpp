@@ -67,7 +67,7 @@ DWORD RTPHeaderExtension::Parse(const RTPMap &extMap,const BYTE* data,const DWOR
 	WORD length = get2(data,2)*4;
 	
 	//Ensure we have enought
-	if (size<length+4)
+	if (size<length+4u)
 		//ERROR
 		return Error("Not enought data");
   
@@ -222,11 +222,11 @@ DWORD RTPHeaderExtension::Parse(const RTPMap &extMap,const BYTE* data,const DWOR
 				break;
 			// SDES string items
 			case RTPStreamId:
-				hasRTPStreamId = true;
+				hasRId = true;
 				rid.assign((const char*)ext+i,len);
 				break;	
 			case RepairedRTPStreamId:
-				hasRepairedRTPStreamId = true;
+				hasRepairedId = true;
 				repairedId.assign((const char*)ext+i,len);
 				break;	
 			case MediaStreamId:
@@ -234,7 +234,7 @@ DWORD RTPHeaderExtension::Parse(const RTPMap &extMap,const BYTE* data,const DWOR
 				mid.assign((const char*)ext+i,len);
 				break;	
 			default:
-				Debug("-Unknown or unmapped extension [%d]\n",id);
+				UltraDebug("-Unknown or unmapped extension [%d]\n",id);
 				break;
 		}
 		//Skip length
@@ -280,7 +280,7 @@ DWORD RTPHeaderExtension::Serialize(const RTPMap &extMap,BYTE* data,const DWORD 
 			//Inc header len
 			len += n;
 			//Set vad
-			data[len] = (vad ? 0x80 : 0x00) | (level & 0x07);
+			data[len++] = (vad ? 0x80 : 0x00) | (level & 0x7f);
 		}
 	}
 	
@@ -332,9 +332,6 @@ DWORD RTPHeaderExtension::Serialize(const RTPMap &extMap,BYTE* data,const DWORD 
 		{
 			//Inc header len
 			len += n;
-
-			//Set id && length
-			data[len] = id << 4 | 0x02;
 			//Calculate absolute send time field (convert ms to 24-bit unsigned with 18 bit fractional part.
 			// Encoding: Timestamp is in seconds, 24 bit 6.18 fixed point, yielding 64s wraparound and 3.8us resolution (one increment for each 477 bytes going out on a 1Gbps interface).
 			//Set it
@@ -366,7 +363,7 @@ DWORD RTPHeaderExtension::Serialize(const RTPMap &extMap,BYTE* data,const DWORD 
 			//Inc header len
 			len += n;
 			//Get all cvo data
-			data[len] = (cvo.facing ? 0x08 : 0x00) | (cvo.flip ? 0x04 : 0x00) | (cvo.rotation & 0x03);
+			data[len++] = (cvo.facing ? 0x08 : 0x00) | (cvo.flip ? 0x04 : 0x00) | (cvo.rotation & 0x03);
 		}
 	}
 	
@@ -458,7 +455,7 @@ DWORD RTPHeaderExtension::Serialize(const RTPMap &extMap,BYTE* data,const DWORD 
 		}
 	}
 	
-	if (hasRTPStreamId)
+	if (hasRId)
 	{
 		//Get id for extension
 		BYTE id = extMap.GetTypeForCodec(RTPStreamId);
@@ -475,7 +472,7 @@ DWORD RTPHeaderExtension::Serialize(const RTPMap &extMap,BYTE* data,const DWORD 
 		}
 	}
 	
-	if (hasRepairedRTPStreamId)
+	if (hasRepairedId)
 	{
 		//Get id for extension
 		BYTE id = extMap.GetTypeForCodec(RepairedRTPStreamId);
@@ -545,13 +542,13 @@ void RTPHeaderExtension::Dump() const
 			frameMarks.tl0PicIdx
 		);
 	
-	if (hasRTPStreamId)
-		Debug("\t\t\t[RTPStreamId str=\"%s\"]\n",rid.c_str());
-	if (hasRepairedRTPStreamId)
-		Debug("\t\t\t[RepairedRTPStreamId str=\"%s\"]\n",repairedId.c_str());
+	if (hasRId)
+		Debug("\t\t\t[RId str=\"%s\"]\n",rid.c_str());
+	if (hasRepairedId)
+		Debug("\t\t\t[RepairedId str=\"%s\"]\n",repairedId.c_str());
 	if (hasMediaStreamId)
 		Debug("\t\t\t[MediaStreamId str=\"%s\"]\n",mid.c_str());
 	
-	Log("\t\t[/RTPHeaderExtension]\n");
+	Debug("\t\t[/RTPHeaderExtension]\n");
 }
 

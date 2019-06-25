@@ -24,6 +24,8 @@
 #include "fifo.h"
 #include <wchar.h>
 #include <stdlib.h>
+#include "AudioCodecFactory.h"
+#include "VideoCodecFactory.h"
 
 RTMPParticipant::RTMPParticipant(DWORD partId,const std::wstring& token) :
 	Participant(Participant::RTMP,partId,token),
@@ -561,10 +563,10 @@ int RTMPParticipant::SendVideo()
 	while(sendingVideo)
 	{
 		//Nos quedamos con el puntero antes de que lo cambien
-		BYTE *pic = videoInput->GrabFrame(frameTime);
-		
+		auto pic = videoInput->GrabFrame(frameTime);
+
 		//Check picture
-		if (!pic)
+		if (!pic.buffer)
 			//Exit
 			continue;
 
@@ -578,7 +580,7 @@ int RTMPParticipant::SendVideo()
 		}
 		
 		//Encode next frame
-		VideoFrame *encoded = encoder->EncodeFrame(pic,videoInput->GetBufferSize());
+		VideoFrame *encoded = encoder->EncodeFrame(pic.buffer,pic.GetBufferSize());
 		
 		//Check
 		if (!encoded)

@@ -1,5 +1,5 @@
 #include "log.h"
-#include "audio.h"
+#include "AudioCodecFactory.h"
 #include "g711/g711codec.h"
 #include "gsm/gsmcodec.h"
 #include "speex/speexcodec.h"
@@ -8,6 +8,8 @@
 #include "opus/opusdecoder.h"
 #include "g722/g722codec.h"
 #include "aac/aacencoder.h"
+#include "aac/aacdecoder.h"
+
 
 AudioEncoder* AudioCodecFactory::CreateEncoder(AudioCodec::Type codec)
 {
@@ -73,6 +75,8 @@ AudioDecoder* AudioCodecFactory::CreateDecoder(AudioCodec::Type codec)
 			return new OpusDecoder();
 		case AudioCodec::G722:
 			return new G722Decoder();
+		case AudioCodec::AAC:
+			return new AACDecoder();
 		default:
 			Error("Codec not found [%d]\n",codec);
 	}

@@ -24,8 +24,11 @@ RTCPBye::RTCPBye(const std::vector<DWORD> &ssrcs,const char* reason) :
 	RTCPPacket(RTCPPacket::Bye) ,
 	ssrcs(ssrcs)
 {
-	//Store reason
-	this->reason = strdup(reason);
+	if (reason)
+		//Store reason
+		this->reason = strdup(reason);
+	else
+		this->reason = nullptr;
 }
 
 RTCPBye::~RTCPBye()
@@ -36,13 +39,14 @@ RTCPBye::~RTCPBye()
 }
 DWORD RTCPBye::GetSize()
 {
-	DWORD len =RTCPCommonHeader::GetSize()+4*ssrcs.size();
+	DWORD len = RTCPCommonHeader::GetSize()+4*ssrcs.size();
 	if (reason)
 		len += strlen(reason)+1;
-	return len;
+	//Return
+	return pad32(len);;
 }
 
-DWORD RTCPBye::Parse(BYTE* data,DWORD size)
+DWORD RTCPBye::Parse(const BYTE* data,DWORD size)
 {
 	//Get header
 	RTCPCommonHeader header;
@@ -71,10 +75,10 @@ DWORD RTCPBye::Parse(BYTE* data,DWORD size)
 		len+=4;
 	}
 
-	//Check if more preseng
+	//Check if more present
 	if (packetSize>len)
 	{
-		//Get len or reason
+		//Get len for reason
 		DWORD n = data[len];
 		//Allocate mem
 		reason = (char*)malloc(n+1);
@@ -86,8 +90,8 @@ DWORD RTCPBye::Parse(BYTE* data,DWORD size)
 		len += n+1;
 	}
 
-	//Return total size
-	return len;
+	//Skip padding
+	return pad32(len);
 }
 
 DWORD RTCPBye::Serialize(BYTE* data,DWORD size)
@@ -121,15 +125,26 @@ DWORD RTCPBye::Serialize(BYTE* data,DWORD size)
 	if (reason)
 	{
 		//Set reason length
-		data[len] = strlen(reason);
-
+		data[len++] = strlen(reason);
 		//Copy reason
-		memcpy(data+len+1,reason,strlen(reason));
-
+		memcpy(data+len,reason,strlen(reason));
 		//Add len
-		len +=strlen(reason)+1;
+		len += strlen(reason);
 	}
 
+	//Append nulls till pading
+	memset(data+len,0,pad32(len)-len);
+	
 	//return
-	return len;
+	return pad32(len);
+}
+
+
+void RTCPBye::Dump()
+{
+	Debug("\t[RTCPBye size=%d reason=%s]\n", GetSize(), reason ? reason : "(null)");
+	for(DWORD i=0;i<ssrcs.size();i++)
+		Debug("\t\t[ssrc=%u/]\n",ssrcs[i]);
+	Debug("\t[RTCPBye/]\n");
+		
 }

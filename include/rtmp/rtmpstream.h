@@ -104,6 +104,8 @@ namespace RTMP
 			const RTMPNetStatusEventInfo BadName		= {L"NetStream.Publish.BadName"			,L"error"};	//Attempt to publish a stream which is already being published by someone else.
 			const RTMPNetStatusEventInfo Idle		= {L"NetStream.Publish.Idle"			,L"status"};	//The publisher of the stream is idle and not transmitting data.
 			const RTMPNetStatusEventInfo Start		= {L"NetStream.Publish.Start"			,L"status"};	//Publish was successful.
+			const RTMPNetStatusEventInfo Rejected		= {L"NetStream.Publish.Rejected"		,L"status"};	
+			const RTMPNetStatusEventInfo Denied		= {L"NetStream.Publish.Denied"			,L"status"};	
 
 		}
 		namespace Record
@@ -274,6 +276,7 @@ public:
 	//virtual void doSend(std::wstring &name,args);
 	//virtual void doStep(DWORD num);
 	//virtual void doTogglePause();
+	virtual void ProcessCommandMessage(RTMPCommandMessage* cmd);
 	
 protected:
 	virtual void fireOnNetStreamStatus(const RTMPNetStatusEventInfo &info,const wchar_t* message);
