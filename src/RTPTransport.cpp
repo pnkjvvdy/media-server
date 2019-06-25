@@ -148,14 +148,15 @@ void RTPTransport::Reset()
 	Log("-RTPTransport reset\n");
 
 	//Clean mem
-	if (iceLocalUsername)
-		free(iceLocalUsername);
-	if (iceLocalPwd)
-		free(iceLocalPwd);
-	if (iceRemoteUsername)
-		free(iceRemoteUsername);
-	if (iceRemotePwd)
-		free(iceRemotePwd);
+	free(iceLocalUsername); 
+	iceLocalUsername = NULL;
+	free(iceLocalPwd);
+	iceLocalPwd = NULL;
+	free(iceRemoteUsername);
+	iceRemoteUsername = NULL;
+	free(iceRemotePwd);
+	iceRemotePwd = NULL;
+	
 	//If secure
 	if (send)
 		//Dealoacate
@@ -280,10 +281,10 @@ int RTPTransport::SetLocalSTUNCredentials(const char* username, const char* pwd)
 {
 	Log("-RTPTransport::SetLocalSTUNCredentials() | [frag:%s,pwd:%s]\n",username,pwd);
 	//Clean mem
-	if (iceLocalUsername)
-		free(iceLocalUsername);
-	if (iceLocalPwd)
-		free(iceLocalPwd);
+	free(iceLocalUsername);
+	iceLocalUsername = NULL;
+	free(iceLocalPwd);
+	iceLocalPwd = NULL;
 	//Store values
 	iceLocalUsername = strdup(username);
 	iceLocalPwd = strdup(pwd);
@@ -296,10 +297,10 @@ int RTPTransport::SetRemoteSTUNCredentials(const char* username, const char* pwd
 {
 	Log("-RTPTransport::SetRemoteSTUNCredentials() |  [frag:%s,pwd:%s]\n",username,pwd);
 	//Clean mem
-	if (iceRemoteUsername)
-		free(iceRemoteUsername);
-	if (iceRemotePwd)
-		free(iceRemotePwd);
+	free(iceRemoteUsername);
+	iceRemoteUsername = NULL;
+	free(iceRemotePwd);
+	iceRemotePwd = NULL;
 	//Store values
 	iceRemoteUsername = strdup(username);
 	iceRemotePwd = strdup(pwd);
